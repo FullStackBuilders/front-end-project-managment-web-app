@@ -1,4 +1,4 @@
-import api from './api';
+import ApiService from './ApiService';
 
 export const projectApi = {
   // Get all projects with optional filters
@@ -14,7 +14,7 @@ export const projectApi = {
         url += `?${params.toString()}`;
       }
 
-      const response = await api.authenticatedRequest(url);
+      const response = await ApiService.authenticatedRequest(url);
       return response;
     } catch (error) {
       console.error('Error fetching projects:', error);
@@ -25,7 +25,7 @@ export const projectApi = {
   // Get single project by ID
   getProjectById: async (id) => {
     try {
-      const response = await api.authenticatedRequest(`/api/projects/${id}`);
+      const response = await ApiService.authenticatedRequest(`/api/projects/${id}`);
       return response;
     } catch (error) {
       console.error('Error fetching project:', error);
@@ -36,7 +36,7 @@ export const projectApi = {
   // Create new project
   createProject: async (projectData) => {
     try {
-      const response = await api.authenticatedRequest('/api/projects', {
+      const response = await ApiService.authenticatedRequest('/api/projects', {
         method: 'POST',
         body: JSON.stringify(projectData),
       });
@@ -50,7 +50,7 @@ export const projectApi = {
   // Update existing project
   updateProject: async (id, projectData) => {
     try {
-      const response = await api.authenticatedRequest(`/api/projects/${id}`, {
+      const response = await ApiService.authenticatedRequest(`/api/projects/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(projectData),
       });
@@ -64,7 +64,7 @@ export const projectApi = {
   // Delete project
   deleteProject: async (id) => {
     try {
-      const response = await api.authenticatedRequest(`/api/projects/${id}`, {
+      const response = await ApiService.authenticatedRequest(`/api/projects/${id}`, {
         method: 'DELETE',
       });
       return response;
@@ -77,7 +77,7 @@ export const projectApi = {
   // Search projects by keyword
   searchProjects: async (keyword) => {
     try {
-      const response = await api.authenticatedRequest(`/api/projects/search?keyword=${encodeURIComponent(keyword)}`);
+      const response = await ApiService.authenticatedRequest(`/api/projects/search?keyword=${encodeURIComponent(keyword)}`);
       return response;
     } catch (error) {
       console.error('Error searching projects:', error);
@@ -88,7 +88,7 @@ export const projectApi = {
   // Get chat by project ID
   getChatByProjectId: async (projectId) => {
     try {
-      const response = await api.authenticatedRequest(`/api/projects/${projectId}/chat`);
+      const response = await ApiService.authenticatedRequest(`/api/projects/${projectId}/chat`);
       return response;
     } catch (error) {
       console.error('Error fetching project chat:', error);
@@ -99,7 +99,7 @@ export const projectApi = {
   // Send invitation to project
   inviteUserToProject: async (email, projectId) => {
     try {
-      const response = await api.authenticatedRequest('/api/projects/invite', {
+      const response = await ApiService.authenticatedRequest('/api/projects/invite', {
         method: 'POST',
         body: JSON.stringify({ email, projectId }),
       });
@@ -113,7 +113,7 @@ export const projectApi = {
   // Accept project invitation
   acceptInvitation: async (token) => {
     try {
-      const response = await api.authenticatedRequest(`/api/projects/accept-invitation?token=${token}`);
+      const response = await ApiService.authenticatedRequest(`/api/projects/accept-invitation?token=${token}`);
       return response;
     } catch (error) {
       console.error('Error accepting invitation:', error);

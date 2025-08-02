@@ -1,137 +1,182 @@
-import { Eye, Trash2, Users, Tag } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Eye, Trash2, Users, Tag, Calendar } from 'lucide-react';
 import { projectApi } from '../services/projectApi';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 export default function ProjectCard({ project, onDelete }) {
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const navigate = useNavigate();
 
-  const handleDelete = async () => {
+  const handleView = () => {
+    navigate(`/project/${project.id}`);
+  };
+
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     setIsDeleting(true);
     try {
       await projectApi.deleteProject(project.id);
-      if (onDelete) {
-        onDelete(project.id);
-      }
+      onDelete(project.id);
+      setShowDeleteModal(false);
     } catch (error) {
       console.error('Error deleting project:', error);
-      // You might want to show a toast notification here
+      alert('Failed to delete project. Please try again.');
     } finally {
       setIsDeleting(false);
-      setShowDeleteConfirm(false);
     }
   };
 
-  const handleView = () => {
-    // Navigate to project details page
-    // For now, we'll just log it
-    console.log('Viewing project:', project.id);
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  const getProjectWarningMessage = () => {
+    const hasIssues = project.issues && project.issues.length > 0;
+    const hasTeamMembers = project.team && project.team.length > 1; // more than just owner
+    
+    let warningParts = [];
+    
+    if (hasIssues) {
+      warningParts.push(`${project.issues.length} issue${project.issues.length !== 1 ? 's' : ''}`);
+    }
+    
+    if (hasTeamMembers) {
+      warningParts.push(`${project.team.length} team member${project.team.length !== 1 ? 's' : ''}`);
+    }
+
+    let baseMessage = "This action cannot be undone. The project will be permanently deleted from the system.";
+    
+    if (warningParts.length > 0) {
+      baseMessage += ` This will also remove all associated ${warningParts.join(' and ')}.`;
+    }
+    
+    return baseMessage;
   };
 
   return (
     <>
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 p-6">
-        {/* Project Header */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg font-semibold text-gray-900 truncate mb-1">
+              {project.name}
+            </h3>
+            <p className="text-sm text-gray-500">
+              Created by {project.owner?.firstName} {project.owner?.lastName}
+            </p>
+          </div>
+        </div>
+
+        {/* Description */}
         <div className="mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-1">
-            {project.name}
-          </h3>
-          <p className="text-gray-600 text-sm line-clamp-2 mb-3">
-            {project.description}
+          <p className="text-sm text-gray-600 line-clamp-2">
+            {project.description || 'No description provided'}
           </p>
         </div>
 
-        {/* Project Details */}
-        <div className="space-y-3 mb-4">
-          {/* Category */}
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-            <span className="text-sm text-gray-600">{project.category}</span>
-          </div>
-
-          {/* Team Size */}
-          <div className="flex items-center gap-2 text-gray-600">
-            <Users size={16} />
-            <span className="text-sm">
-              {project.team ? project.team.length : 0} member{project.team?.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-
-          {/* Tags */}
-          {project.tags && project.tags.length > 0 && (
-            <div className="flex items-start gap-2">
-              <Tag size={16} className="text-gray-400 mt-0.5" />
-              <div className="flex flex-wrap gap-1">
-                {project.tags.slice(0, 3).map((tag, index) => (
-                  <span 
-                    key={index}
-                    className="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs"
-                  >
-                    {tag}
-                  </span>
-                ))}
-                {project.tags.length > 3 && (
-                  <span className="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
-                    +{project.tags.length - 3} more
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
+        {/* Category */}
+        <div className="mb-4">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            {project.category}
+          </span>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-2 pt-4 border-t border-gray-100">
-          <Button 
+        {/* Tags */}
+        {project.tags && project.tags.length > 0 && (
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-1">
+              {project.tags.slice(0, 3).map((tag, index) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700"
+                >
+                  <Tag className="w-3 h-3" />
+                  {tag}
+                </span>
+              ))}
+              {project.tags.length > 3 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">
+                  +{project.tags.length - 3} more
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Team Members */}
+        {project.team && project.team.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-600">
+                {project.team.length} member{project.team.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Issues Count */}
+        {project.issues && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 text-gray-500">📋</div>
+              <span className="text-sm text-gray-600">
+                {project.issues.length} issue{project.issues.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
+          <Button
             onClick={handleView}
-            className="flex-1 flex items-center justify-center gap-2"
+            className="flex-1 flex items-center gap-2"
             size="sm"
           >
-            <Eye size={16} />
-            View
+            <Eye className="w-4 h-4" />
+            View Project
           </Button>
-          <Button 
-            onClick={() => setShowDeleteConfirm(true)}
+          
+          <Button
+            onClick={handleDeleteClick}
             variant="outline"
             size="sm"
-            className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+            className="text-red-600 hover:text-red-700 hover:border-red-300 hover:bg-red-50"
           >
-            <Trash2 size={16} />
-            Delete
+            <Trash2 className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Delete Project
-            </h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete "{project.name}"? This action cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={isDeleting}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmationModal
+        showModal={showDeleteModal}
+        setShowModal={setShowDeleteModal}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Project"
+        message={`Are you sure you want to delete the project "${project.name}"?`}
+        warningMessage={getProjectWarningMessage()}
+        confirmText="Delete Project"
+        isDeleting={isDeleting}
+        itemType="project"
+      />
     </>
   );
 }

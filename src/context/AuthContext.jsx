@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import ApiService from '../services/api';
+import AuthService from '../services/AuthService';
 
 const AuthContext = createContext();
 
@@ -14,12 +14,22 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    // Check if user is authenticated on app load
     const checkAuth = () => {
-      const authenticated = ApiService.isAuthenticated();
+      const authenticated = AuthService.isAuthenticated();
       setIsAuthenticated(authenticated);
+      
+      if (authenticated) {
+        const userInfo = AuthService.getCurrentUser();
+        setUser(userInfo);
+        
+        // if (process.env.NODE_ENV === 'development') {
+        //   AuthService.debugTokenInfo();
+        // }
+      }
+      
       setIsLoading(false);
     };
 
@@ -28,37 +38,75 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
-      const response = await ApiService.login(credentials);
-      ApiService.setToken(response.accessToken);
+      setIsLoading(true);
+      const response = await AuthService.login(credentials);
+      
+      AuthService.setToken(response.accessToken);
+      const userInfo = AuthService.getCurrentUser();
+      
+      setUser(userInfo);
       setIsAuthenticated(true);
+      
       return response;
     } catch (error) {
+      setUser(null);
+      setIsAuthenticated(false);
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const register = async (userData) => {
     try {
-      const response = await ApiService.register(userData);
-      ApiService.setToken(response.accessToken);
+      setIsLoading(true);
+      const response = await AuthService.register(userData);
+      
+      AuthService.setToken(response.accessToken);
+      const userInfo = AuthService.getCurrentUser();
+      
+      setUser(userInfo);
       setIsAuthenticated(true);
+      
       return response;
     } catch (error) {
+      setUser(null);
+      setIsAuthenticated(false);
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const logout = () => {
-    ApiService.removeToken();
+    AuthService.logout();
     setIsAuthenticated(false);
+    setUser(null);
+  };
+
+  const isCreator = (createdById) => {
+    return AuthService.isCurrentUserCreator(createdById);
+  };
+
+  const refreshUser = () => {
+    if (AuthService.isAuthenticated()) {
+      const userInfo = AuthService.getCurrentUser();
+      setUser(userInfo);
+    }
   };
 
   const value = {
     isAuthenticated,
     isLoading,
+    user,
     login,
     register,
     logout,
+    isCreator,
+    refreshUser,
+    getCurrentUserId: () => AuthService.getCurrentUserId(),
+    getCurrentUsername: () => AuthService.getCurrentUsername(),
+    getTokenExpirationTime: () => AuthService.getTokenExpirationTime(),
   };
 
   return (
