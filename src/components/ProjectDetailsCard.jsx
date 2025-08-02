@@ -1,10 +1,19 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Users, Tag, FolderOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, Tag, FolderOpen, ChevronDown, ChevronUp, UserPlus } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import SendInviteModal from './SendInviteModal';
+import InviteStatusModal from './InviteStatusModal';
 
 export default function ProjectDetailsCard({ project }) {
   const [showAllTags, setShowAllTags] = useState(false);
   const [showAllMembers, setShowAllMembers] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [isStatusSuccess, setIsStatusSuccess] = useState(false);
+  
+  const { user } = useAuth();
 
   if (!project) return null;
 
@@ -17,6 +26,21 @@ export default function ProjectDetailsCard({ project }) {
   // Show only first 4 members initially
   const displayedMembers = showAllMembers ? team : team.slice(0, 4);
   const hasMoreMembers = team.length > 4;
+
+  // Check if current user is the project owner
+  const isProjectOwner = user && owner && user.userId === owner.id;
+
+  const handleInviteSent = (response) => {
+    setIsStatusSuccess(true);
+    setStatusMessage(response.message);
+    setShowStatusModal(true);
+  };
+
+  const handleInviteError = (errorMessage) => {
+    setIsStatusSuccess(false);
+    setStatusMessage(errorMessage || 'Something went wrong while sending invitation');
+    setShowStatusModal(true);
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -99,26 +123,40 @@ export default function ProjectDetailsCard({ project }) {
               <Users className="w-4 h-4" />
               Team Members ({team.length})
             </h3>
-            {hasMoreMembers && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAllMembers(!showAllMembers)}
-                className="text-xs text-primary hover:text-primary/80"
-              >
-                {showAllMembers ? (
-                  <>
-                    <ChevronUp className="w-3 h-3 mr-1" />
-                    Show Less
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="w-3 h-3 mr-1" />
-                    View All
-                  </>
-                )}
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {/* Add Member Button - Only show for project owner */}
+              {isProjectOwner && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setShowInviteModal(true)}
+                  className="text-xs bg-primary text-white hover:bg-primary/90"
+                >
+                  <UserPlus className="w-3 h-3 mr-1" />
+                  Add Member
+                </Button>
+              )}
+              {hasMoreMembers && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllMembers(!showAllMembers)}
+                  className="text-xs text-primary hover:text-primary/80"
+                >
+                  {showAllMembers ? (
+                    <>
+                      <ChevronUp className="w-3 h-3 mr-1" />
+                      Show Less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3 h-3 mr-1" />
+                      View All
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
           
           <div className="space-y-3">
@@ -148,6 +186,22 @@ export default function ProjectDetailsCard({ project }) {
           </div>
         </div>
       )}
+
+      {/* Send Invite Modal */}
+      <SendInviteModal
+        showModal={showInviteModal}
+        setShowModal={setShowInviteModal}
+        projectId={project.id}
+        onInviteSent={handleInviteSent}
+      />
+
+      {/* Status Modal */}
+      <InviteStatusModal
+        show={showStatusModal}
+        isSuccess={isStatusSuccess}
+        message={statusMessage}
+        onClose={() => setShowStatusModal(false)}
+      />
     </div>
   );
 }

@@ -1,200 +1,190 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
-import { projectApi } from '../services/projectApi';
+import { X, AlertCircle, Mail } from 'lucide-react';
+import { emailInvitationApi } from '../services/emailInvitationApi';
 
-export default function CreateProjectModal({ showModal, setShowModal, onProjectCreated }) {
-  const [projectName, setProjectName] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('Full Stack');
-  const [tags, setTags] = useState([]);
-  const [currentTag, setCurrentTag] = useState('');
-  const [tagWarning, setTagWarning] = useState('');
-  const [creating, setCreating] = useState(false);
+export default function SendInviteModal({ showModal, setShowModal, projectId, onInviteSent }) {
+  const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [emailError, setEmailError] = useState('');
 
-  const addTag = () => {
-    const trimmedTag = currentTag.trim();
-    if (!trimmedTag) return;
+  const validateEmail = (email) => {
+    // Industry standard email validation regex
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+    
+    if (!emailRegex.test(email)) {
+      return false;
+    }
+    
+    // Additional checks for real-world validation
+    const parts = email.split('@');
+    if (parts.length !== 2) return false;
+    
+    const [localPart, domain] = parts;
+    
+    // Local part validations
+    if (localPart.length === 0 || localPart.length > 64) return false;
+    if (localPart.startsWith('.') || localPart.endsWith('.')) return false;
+    if (localPart.includes('..')) return false;
+    
+    // Domain validations
+    if (domain.length === 0 || domain.length > 253) return false;
+    if (domain.startsWith('.') || domain.endsWith('.')) return false;
+    if (domain.includes('..')) return false;
+    
+    // Domain must have at least one dot and proper TLD
+    const domainParts = domain.split('.');
+    if (domainParts.length < 2) return false;
+    
+    // TLD should be at least 2 characters
+    const tld = domainParts[domainParts.length - 1];
+    if (tld.length < 2) return false;
+    
+    return true;
+  };
 
-    if (tags.includes(trimmedTag)) {
-      setTagWarning('This tag already exists');
+  const handleChange = (e) => {
+    const value = e.target.value;
+    setEmail(value);
+    
+    // Clear errors when user starts typing
+    if (error) setError('');
+    if (emailError) setEmailError('');
+    
+    // Real-time email validation
+    if (value.trim() && !validateEmail(value.trim())) {
+      setEmailError('Invalid email address');
+    } else {
+      setEmailError('');
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!email.trim()) {
+      setEmailError('Email is required');
       return;
     }
 
-    setTags([...tags, trimmedTag]);
-    setCurrentTag('');
-    setTagWarning('');
-  };
-
-  const removeTag = (tagToRemove) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addTag();
+    if (!validateEmail(email.trim())) {
+      setEmailError('Invalid email address');
+      return;
     }
-  };
 
-  const resetForm = () => {
-    setProjectName('');
-    setDescription('');
-    setCategory('Full Stack');
-    setTags([]);
-    setCurrentTag('');
-    setTagWarning('');
+    setIsSubmitting(true);
     setError('');
-  };
 
-  const handleCreateProject = async (e) => {
-    e.preventDefault();
-    setCreating(true);
-    setError('');
     try {
-      await projectApi.createProject({
-        name: projectName,
-        description,
-        category,
-        tags,
-      });
+      await emailInvitationApi.sendInvitation(email.trim(), projectId);
+      
+      // Call success callback
+      if (onInviteSent) {
+        onInviteSent();
+      }
+      
+      // Close modal and reset form
       setShowModal(false);
-      resetForm();
-      if (onProjectCreated) onProjectCreated();
-    } catch (err) {
-      setError(err.message || 'Failed to create project');
+      setEmail('');
+      setEmailError('');
+    } catch (error) {
+      // Extract error message from backend response
+      const errorMessage = error.message || 'Failed to send invitation';
+      setError(errorMessage);
     } finally {
-      setCreating(false);
+      setIsSubmitting(false);
     }
+  };
+
+  const handleClose = () => {
+    setShowModal(false);
+    setEmail('');
+    setError('');
+    setEmailError('');
   };
 
   if (!showModal) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Create New Project</h2>
-          <button
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            onClick={() => {
-              setShowModal(false);
-              resetForm();
-            }}
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Mail className="w-5 h-5 text-primary" />
+            Send Invitation
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClose}
+            className="text-gray-400 hover:text-gray-600"
           >
-            <X size={20} />
-          </button>
+            <X className="w-4 h-4" />
+          </Button>
         </div>
-        <form onSubmit={handleCreateProject} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Project Name *</label>
-            <input
-              type="text"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              value={projectName}
-              onChange={e => setProjectName(e.target.value)}
-              required
-              placeholder="Enter project name"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Description *</label>
-            <textarea
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              rows="3"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              required
-              placeholder="Enter project description"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Category</label>
-            <select
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              value={category}
-              onChange={e => setCategory(e.target.value)}
-            >
-              <option value="Full Stack">Full Stack</option>
-              <option value="Front End">Front End</option>
-              <option value="Back End">Back End</option>
-              <option value="Mobile">Mobile</option>
-              <option value="DevOps">DevOps</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Tags</label>
-            <div className="flex gap-2 mb-1">
-              <input
-                type="text"
-                className={`flex-1 border rounded-md px-3 py-2 focus:outline-none focus:ring-2 ${
-                  tagWarning ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-primary'
-                }`}
-                value={currentTag}
-                onChange={e => {
-                  const value = e.target.value;
-                  setCurrentTag(value);
-                  if (tags.includes(value.trim())) {
-                    setTagWarning('This tag already exists');
-                  } else {
-                    setTagWarning('');
-                  }
-                }}
-                onKeyPress={handleKeyPress}
-                placeholder="Enter a tag"
-              />
-              <Button
-                type="button"
-                onClick={addTag}
-                variant="outline"
-                disabled={!currentTag.trim() || tags.includes(currentTag.trim())}
-              >
-                Add
-              </Button>
-            </div>
-            {tagWarning && (
-              <div className="text-red-600 text-sm mb-1">{tagWarning}</div>
-            )}
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => removeTag(tag)}
-                      className="text-blue-600 hover:text-blue-800 ml-1"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6">
+          {/* Error Message */}
           {error && (
-            <div className="text-red-600 text-sm bg-red-50 p-2 rounded">
-              {error}
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <p className="text-sm text-red-600">{error}</p>
             </div>
           )}
-          <div className="flex justify-end gap-3 pt-4">
+
+          {/* Email Input */}
+          <div className="mb-6">
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              Email Address *
+            </label>
+            <input
+              type="text"
+              id="email"
+              name="email"
+              value={email}
+              onChange={handleChange}
+              className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 ${
+                emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-primary'
+              } focus:border-transparent`}
+              placeholder="Enter email address"
+            />
+            {emailError && (
+              <div className="text-red-600 text-sm mt-1">{emailError}</div>
+            )}
+            {!emailError && (
+              <p className="text-xs text-gray-500 mt-1">
+                An invitation link will be sent to this email address
+              </p>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3">
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                setShowModal(false);
-                resetForm();
-              }}
-              disabled={creating}
+              onClick={handleClose}
+              className="flex-1"
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={creating}>
-              {creating ? 'Creating...' : 'Create Project'}
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={isSubmitting || !email.trim() || emailError}
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Sending...
+                </>
+              ) : (
+                'Send Invite'
+              )}
             </Button>
           </div>
         </form>

@@ -2,12 +2,14 @@ import { configureStore } from '@reduxjs/toolkit';
 import projectSlice from './projectSlice';
 import issueSlice from './issueSlice';
 import chatSlice from './chatSlice';
+import invitationReducer from './invitationSlice';
 
 export const store = configureStore({
   reducer: {
     project: projectSlice,
     issues: issueSlice,
     chat: chatSlice,
+    invitation: invitationReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

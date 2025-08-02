@@ -1,4 +1,5 @@
 import AuthService from './AuthService';
+import CustomApiError from './CustomApiError'; // ✅ Make sure this path is correct
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -6,7 +7,6 @@ class ApiService {
   // Base authenticated request method
   async authenticatedRequest(endpoint, options = {}) {
     const token = AuthService.getToken();
-    
     if (!token) {
       throw new Error('No authentication token found');
     }
@@ -46,33 +46,21 @@ class ApiService {
     }
   }
 
-  // Error handling
+  // ✅ Updated error handler using CustomApiError
   async handleErrorResponse(response) {
     let errorMessage = 'Request failed';
-    
+    let errorData = null;
+
     try {
-      const errorData = await response.json();
-      errorMessage = errorData.message || errorData.error || errorMessage;
+      const responseBody = await response.json();
+      errorData = responseBody;
+      errorMessage = responseBody.message || responseBody.error || errorMessage;
     } catch {
       errorMessage = response.statusText || errorMessage;
     }
 
-    // Handle specific status codes
-    switch (response.status) {
-      case 401:
-        AuthService.logout();
-        window.location.href = '/login';
-        throw new Error('Session expired. Please login again.');
-      
-      case 403:
-        throw new Error('You do not have permission to perform this action.');
-      
-      case 404:
-        throw new Error('Resource not found.');
-      
-      default:
-        throw new Error(errorMessage);
-    }
+    // ✅ Throw enhanced error object with status, data, and isConflict
+    throw new CustomApiError(errorMessage, response.status, errorData);
   }
 
   // HTTP Method Helpers

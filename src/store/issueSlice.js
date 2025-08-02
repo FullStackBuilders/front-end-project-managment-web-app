@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { issueApi } from '../services/issueApi';
 
-// Fetch issues by project
+// Fetch issues by projectId
 export const fetchIssuesByProject = createAsyncThunk(
   'issues/fetchByProject',
   async (projectId, { rejectWithValue }) => {
