@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, Mail } from 'lucide-react';
 
@@ -9,9 +9,6 @@ export default function ResendConfirmationModal({
   onConfirm 
 }) {
   const [isResending, setIsResending] = useState(false);
-
-  useEffect(() => {
-  }, [showModal, email]);
 
   const handleConfirm = async () => {
     setIsResending(true);

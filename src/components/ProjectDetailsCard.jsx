@@ -4,6 +4,8 @@ import { Users, Tag, FolderOpen, ChevronDown, ChevronUp, UserPlus } from 'lucide
 import { useAuth } from '../context/AuthContext';
 import SendInviteModal from './SendInviteModal';
 import InviteStatusModal from './InviteStatusModal';
+import ResendConfirmationModal from './ResendConfirmationModal';
+import { emailInvitationApi } from '../services/emailInvitationApi';
 
 export default function ProjectDetailsCard({ project }) {
   const [showAllTags, setShowAllTags] = useState(false);
@@ -12,22 +14,21 @@ export default function ProjectDetailsCard({ project }) {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [isStatusSuccess, setIsStatusSuccess] = useState(false);
-  
+  const [showResendModal, setShowResendModal] = useState(false);
+  const [resendData, setResendData] = useState(null);
+
   const { user } = useAuth();
 
   if (!project) return null;
 
   const { name, description, category, tags = [], team = [], owner } = project;
-  
-  // Show only first 3 tags initially
+
   const displayedTags = showAllTags ? tags : tags.slice(0, 3);
   const hasMoreTags = tags.length > 3;
 
-  // Show only first 4 members initially
   const displayedMembers = showAllMembers ? team : team.slice(0, 4);
   const hasMoreMembers = team.length > 4;
 
-  // Check if current user is the project owner
   const isProjectOwner = user && owner && user.userId === owner.id;
 
   const handleInviteSent = (response) => {
@@ -36,10 +37,38 @@ export default function ProjectDetailsCard({ project }) {
     setShowStatusModal(true);
   };
 
-  const handleInviteError = (errorMessage) => {
-    setIsStatusSuccess(false);
-    setStatusMessage(errorMessage || 'Something went wrong while sending invitation');
-    setShowStatusModal(true);
+  const handleInviteError = (error) => {
+    if (error.status === 409 && error.data?.details?.canResend) {
+      setResendData({
+        email: error.data.details.email,
+        projectId: project.id,
+      });
+      setShowInviteModal(false);
+      setShowResendModal(true);
+    } else {
+      setIsStatusSuccess(false);
+      setStatusMessage(error.message || 'Something went wrong while sending invitation');
+      setShowStatusModal(true);
+    }
+  };
+
+  const handleResendConfirm = async () => {
+    if (!resendData) return;
+
+    try {
+      const response = await emailInvitationApi.sendInvitation(
+        resendData.email,
+        resendData.projectId,
+        true
+      );
+      setShowResendModal(false);
+      setResendData(null);
+      handleInviteSent(response);
+    } catch (error) {
+      setShowResendModal(false);
+      setResendData(null);
+      handleInviteError(error);
+    }
   };
 
   return (
@@ -193,6 +222,15 @@ export default function ProjectDetailsCard({ project }) {
         setShowModal={setShowInviteModal}
         projectId={project.id}
         onInviteSent={handleInviteSent}
+        onInviteError={handleInviteError}
+      />
+
+      {/* Resend Modal */}
+      <ResendConfirmationModal
+        showModal={showResendModal}
+        onClose={() => setShowResendModal(false)}
+        email={resendData?.email}
+        onConfirm={handleResendConfirm}
       />
 
       {/* Status Modal */}
