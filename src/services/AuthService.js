@@ -1,5 +1,5 @@
 import { jwtDecode } from 'jwt-decode';
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const TOKEN_KEY = 'accessToken';
 class AuthService {
 // Authentication Methods
