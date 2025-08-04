@@ -1,3 +1,4 @@
+// pages/Dashboard.jsx - ADD THESE IMPORTS AND CHANGES
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus, FolderOpen } from 'lucide-react';
@@ -7,6 +8,8 @@ import FilterPanel from '../components/FilterPanel';
 import ProjectCard from '../components/ProjectCard';
 import CreateProjectModal from '@/components/CreateProjectModal';
 import SearchBar from '../components/SearchBar';
+import ProjectJoinSuccessModal from '../components/ProjectJoinSuccessModal'; // NEW
+import invitationApi from '../services/invitationApi'; // NEW
 
 export default function Dashboard() {
   const [projects, setProjects] = useState([]);
@@ -15,10 +18,66 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
 
+  // NEW: Success modal state
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [joinedProjectName, setJoinedProjectName] = useState('');
+
   // Filter state
   const [selectedCategory, setSelectedCategory] = useState('');
   const [searchTag, setSearchTag] = useState('');
   const [searchName, setSearchName] = useState('');
+
+  // NEW: Check for pending invitations and show success modal
+  useEffect(() => {
+    checkForInvitationSuccess();
+  }, []);
+
+  useEffect(() => {
+    checkForPendingInvitations();
+  }, []);
+
+  // NEW: Check if user just accepted an invitation
+  const checkForInvitationSuccess = () => {
+    const invitationAccepted = sessionStorage.getItem('invitationAccepted');
+    const projectJoined = sessionStorage.getItem('projectJoined');
+
+    if (invitationAccepted === 'true' && projectJoined) {
+      setJoinedProjectName(projectJoined);
+      setShowSuccessModal(true);
+    }
+  };
+
+  // NEW: Check for pending invitations after login
+  const checkForPendingInvitations = async () => {
+    const pendingInvitation = sessionStorage.getItem('pendingInvitation');
+    
+    if (pendingInvitation === 'true') {
+      try {
+        await invitationApi.processPendingInvitations();
+        
+        // Show success modal if we have project name
+        const projectName = sessionStorage.getItem('invitationProjectName');
+        if (projectName) {
+          setJoinedProjectName(projectName);
+          setShowSuccessModal(true);
+        }
+        
+        // Clean up session storage
+        sessionStorage.removeItem('pendingInvitation');
+        sessionStorage.removeItem('invitationToken');
+        sessionStorage.removeItem('invitationProjectName');
+        
+        // Refresh projects to show newly joined project
+        fetchProjects();
+      } catch (err) {
+        console.error('Error processing pending invitations:', err);
+        // Clean up session storage even on error
+        sessionStorage.removeItem('pendingInvitation');
+        sessionStorage.removeItem('invitationToken');
+        sessionStorage.removeItem('invitationProjectName');
+      }
+    }
+  };
 
   // Fetch projects from API
   const fetchProjects = async (category = '', tag = '') => {
@@ -70,6 +129,14 @@ export default function Dashboard() {
 
   const handleProjectDelete = (deletedProjectId) => {
     setProjects(prev => prev.filter(project => project.id !== deletedProjectId));
+  };
+
+  // NEW: Handle success modal close
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+    setJoinedProjectName('');
+    // Refresh projects to ensure newly joined project is displayed
+    fetchProjects();
   };
 
   if (loading) {
@@ -126,6 +193,12 @@ export default function Dashboard() {
             onProjectCreated={handleProjectCreated}
           />
         )}
+        {/* NEW: Success Modal */}
+        <ProjectJoinSuccessModal
+          isOpen={showSuccessModal}
+          onClose={handleSuccessModalClose}
+          projectName={joinedProjectName}
+        />
       </div>
     );
   }
@@ -218,6 +291,12 @@ export default function Dashboard() {
           onProjectCreated={handleProjectCreated}
         />
       )}
+      {/* NEW: Success Modal */}
+      <ProjectJoinSuccessModal
+        isOpen={showSuccessModal}
+        onClose={handleSuccessModalClose}
+        projectName={joinedProjectName}
+      />
     </div>
   );
 }

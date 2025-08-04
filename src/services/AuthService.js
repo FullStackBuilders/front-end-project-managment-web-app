@@ -81,7 +81,7 @@ class AuthService {
     return {
       userId: decoded.userId,
       username: decoded.sub,
-      email: decoded.email,
+      email: decoded.sub, // Use sub as email
     };
   }
 

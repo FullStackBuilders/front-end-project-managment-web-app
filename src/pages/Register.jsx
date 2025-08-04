@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +22,13 @@ export default function Register() {
   
   const { register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.invitationEmail) {
+      setFormData(prev => ({ ...prev, email: location.state.invitationEmail }));
+    }
+  }, [location.state]);
 
   const handleChange = (e) => {
     setFormData({
@@ -80,7 +87,13 @@ export default function Register() {
     try {
       const { confirmPassword, ...registrationData } = formData;
       await register(registrationData);
-      navigate('/dashboard');
+      const pendingInvitation = sessionStorage.getItem('pendingInvitation');
+
+      if (pendingInvitation === 'true') {
+        navigate('/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.message);
     } finally {
