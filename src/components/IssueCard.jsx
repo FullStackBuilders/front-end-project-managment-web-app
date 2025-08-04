@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { deleteIssue } from '../store/issueSlice';
 import AssigneeModal from './AssigneeModal';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
+import IssueDetailModal from './IssueDetailModal'; // Import the new modal
 
 const PRIORITY_COLORS = {
   HIGH: 'bg-red-100 text-red-800 border-red-200',
@@ -23,12 +24,14 @@ const PRIORITY_ICONS = {
 export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, ...dragProps }) {
   const [showAssigneeModal, setShowAssigneeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false); // New state for detail modal
   const [isDeleting, setIsDeleting] = useState(false);
   const dispatch = useDispatch();
-  const { isCreator } = useAuth();
+  const { isCreator, canAssignIssue } = useAuth();
   const { currentProject } = useSelector(state => state.project);
 
   const canEditOrDelete = isCreator(issue.createdById);
+  const canAssign = canAssignIssue(issue);
 
   const handleDeleteClick = (e) => {
     e.preventDefault();
@@ -64,7 +67,7 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
     e.preventDefault();
     e.stopPropagation();
     e.nativeEvent.stopImmediatePropagation();
-    console.log('View issue:', issue.id);
+    setShowDetailModal(true); // Open the detail modal
   };
 
   const handleAssign = (e) => {
@@ -152,17 +155,19 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
               View
             </Button>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 text-xs"
-              onClick={handleAssign}
-              onMouseDown={(e) => e.stopPropagation()}
-              type="button"
-            >
-              <UserPlus className="w-3 h-3 mr-1" />
-              Assign
-            </Button>
+            {canAssign && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex-1 text-xs"
+                onClick={handleAssign}
+                onMouseDown={(e) => e.stopPropagation()}
+                type="button"
+              >
+                <UserPlus className="w-3 h-3 mr-1" />
+                Assign
+              </Button>
+            )}
 
             {canEditOrDelete && (
               <Button
@@ -214,6 +219,13 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
         confirmText="Delete Issue"
         isDeleting={isDeleting}
         itemType="issue"
+      />
+
+      {/* Issue Detail Modal */}
+      <IssueDetailModal
+        showModal={showDetailModal}
+        setShowModal={setShowDetailModal}
+        issueId={issue.id}
       />
     </>
   );
