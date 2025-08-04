@@ -90,6 +90,11 @@ export default function AcceptInvitation() {
   };
 
   const handleRegisterRedirect = () => {
+    // FIXED: Store invitation context for after registration
+    sessionStorage.setItem('pendingInvitation', 'true');
+    sessionStorage.setItem('invitationToken', token);
+    sessionStorage.setItem('invitationProjectName', invitationData.projectName);
+    
     navigate('/register', { 
       state: { 
         invitationEmail: invitationData?.email || '',
@@ -241,7 +246,7 @@ export default function AcceptInvitation() {
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <p className="text-red-600 text-sm">{error}</p>
                 </div>
-              )}
+                )}
             </div>
           </CardContent>
         </Card>

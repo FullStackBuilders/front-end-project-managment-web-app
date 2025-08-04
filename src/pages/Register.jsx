@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import invitationApi from '../services/invitationApi'; // Add this import
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -77,6 +78,40 @@ export default function Register() {
     return true;
   };
 
+  // New function to handle invitation acceptance after registration
+  const handleInvitationAfterRegistration = async (userEmail) => {
+    const invitationToken = sessionStorage.getItem('invitationToken');
+    
+    if (invitationToken) {
+      try {
+        console.log('Accepting invitation with token:', invitationToken, 'for email:', userEmail);
+        const response = await invitationApi.acceptInvitation(invitationToken, userEmail);
+        console.log('Invitation acceptance response:', response);
+        
+        const acceptanceData = response.data;
+
+        // Store project information for success modal
+        sessionStorage.setItem('invitationAccepted', 'true');
+        sessionStorage.setItem('projectJoined', acceptanceData.projectName);
+
+        // Clear invitation token since it's been used
+        sessionStorage.removeItem('invitationToken');
+        sessionStorage.removeItem('pendingInvitation');
+        sessionStorage.removeItem('invitationProjectName');
+        
+        console.log('Successfully stored invitation acceptance data');
+        return true;
+      } catch (err) {
+        console.error('Failed to accept invitation after registration:', err);
+        // Don't throw here - let the user proceed to dashboard
+        return false;
+      }
+    } else {
+      console.log('No invitation token found in sessionStorage');
+    }
+    return false;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -86,15 +121,28 @@ export default function Register() {
 
     try {
       const { confirmPassword, ...registrationData } = formData;
-      await register(registrationData);
+      console.log('Starting registration process...');
+      
+      const { response, userInfo } = await register(registrationData);
+      console.log('Registration successful, userInfo:', userInfo);
+      
+      // Check if there's a pending invitation to handle
       const pendingInvitation = sessionStorage.getItem('pendingInvitation');
-
-      if (pendingInvitation === 'true') {
-        navigate('/dashboard');
-      } else {
-        navigate('/dashboard');
+      console.log('Pending invitation status:', pendingInvitation);
+      
+      if (pendingInvitation === 'true' && userInfo?.email) {
+        console.log('Processing pending invitation for:', userInfo.email);
+        // Try to accept the invitation with the newly registered user's email
+        const invitationResult = await handleInvitationAfterRegistration(userInfo.email);
+        console.log('Invitation processing result:', invitationResult);
       }
+      
+      // Always navigate to dashboard
+      console.log('Navigating to dashboard...');
+      navigate('/dashboard');
+      
     } catch (err) {
+      console.error('Registration error:', err);
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -109,13 +157,27 @@ export default function Register() {
         <p className="text-sm text-gray-500">Manage your projects efficiently with our powerful tools</p>
       </div>
 
-      <Card className="w-full max-w-md mt-16">
+      {/* Show invitation banner if coming from invitation */}
+      {location.state?.showInvitationBanner && (
+        <div className="w-full max-w-md mb-4 mt-16">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-blue-800 text-sm text-center">
+              <strong>You're joining:</strong> {location.state.projectName}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <Card className="w-full max-w-md mt-4">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">
             Create an account
           </CardTitle>
           <CardDescription className="text-center">
-            Join us to manage your projects efficiently
+            {location.state?.showInvitationBanner 
+              ? "Create your account to join the project"
+              : "Join us to manage your projects efficiently"
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -162,7 +224,7 @@ export default function Register() {
                 placeholder="Enter your email"
                 value={formData.email}
                 onChange={handleChange}
-                disabled={isLoading}
+                disabled={isLoading || location.state?.invitationEmail} // Disable if pre-filled from invitation
                 autoComplete="off"
               />
             </div>
@@ -215,7 +277,8 @@ export default function Register() {
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Creating account...' : 'Create Account'}
+              {isLoading ? 'Creating account...' : 
+               location.state?.showInvitationBanner ? 'Create Account & Join Project' : 'Create Account'}
             </Button>
           </form>
           <div className="mt-6 text-center text-sm">
