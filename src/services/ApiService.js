@@ -1,5 +1,5 @@
 import AuthService from './AuthService';
-import CustomApiError from './CustomApiError'; // ✅ Make sure this path is correct
+import CustomApiError from './CustomApiError'; 
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -46,7 +46,6 @@ class ApiService {
     }
   }
 
-  // ✅ Updated error handler using CustomApiError
   async handleErrorResponse(response) {
     let errorMessage = 'Request failed';
     let errorData = null;
@@ -59,11 +58,9 @@ class ApiService {
       errorMessage = response.statusText || errorMessage;
     }
 
-    // ✅ Throw enhanced error object with status, data, and isConflict
     throw new CustomApiError(errorMessage, response.status, errorData);
   }
 
-  // HTTP Method Helpers
   async get(endpoint) {
     return this.authenticatedRequest(endpoint, { method: 'GET' });
   }

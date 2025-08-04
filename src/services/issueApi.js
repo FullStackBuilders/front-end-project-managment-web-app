@@ -5,9 +5,14 @@ export const issueApi = {
   getIssuesByProjectId: async (projectId) => {
     try {
       const response = await ApiService.get(`/api/issues/project/${projectId}`);
-      return response.data;
+      // Handle the case where backend returns empty array with success message
+      return response.data || [];
     } catch (error) {
       console.error('Error fetching issues:', error);
+      // If it's a 404 or "no issues found" scenario, return empty array instead of throwing
+      if (error.status === 404 || error.message?.includes('No issues found')) {
+        return [];
+      }
       throw new Error('Failed to fetch issues');
     }
   },
@@ -74,7 +79,17 @@ export const issueApi = {
       return response.data;
     } catch (error) {
       console.error('Error updating issue status:', error);
-      throw new Error('Failed to update issue status');
+      
+      // Provide more specific error messages based on common scenarios
+      if (error.status === 401 || error.status === 403) {
+        throw new Error('Only the assignee can update the issue status');
+      } else if (error.status === 404) {
+        throw new Error('Issue not found');
+      } else if (error.status === 400) {
+        throw new Error('Invalid status value');
+      } else {
+        throw new Error('Failed to update issue status');
+      }
     }
   }
 };

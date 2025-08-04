@@ -1,33 +1,40 @@
-// pages/Dashboard.jsx - ADD THESE IMPORTS AND CHANGES
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus, FolderOpen } from 'lucide-react';
 import { projectApi } from '../services/projectApi';
+import { useAuth } from '../../src/context/AuthContext';
 import Header from '../components/Header';
 import FilterPanel from '../components/FilterPanel';
 import ProjectCard from '../components/ProjectCard';
 import CreateProjectModal from '@/components/CreateProjectModal';
 import SearchBar from '../components/SearchBar';
-import ProjectJoinSuccessModal from '../components/ProjectJoinSuccessModal'; // NEW
-import invitationApi from '../services/invitationApi'; // NEW
+import ProjectJoinSuccessModal from '../components/ProjectJoinSuccessModal';
+import invitationApi from '../services/invitationApi';
 
 export default function Dashboard() {
+  const { user, getCurrentUserId } = useAuth();
   const [projects, setProjects] = useState([]);
-  const [filteredProjects, setFilteredProjects] = useState([]);
+  const [filteredProjects, setFilteredProjects] = useState({
+    myProjects: [],
+    joinedProjects: []
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
 
-  // NEW: Success modal state
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [joinedProjectName, setJoinedProjectName] = useState('');
 
-  // Filter state
   const [selectedCategory, setSelectedCategory] = useState('');
   const [searchTag, setSearchTag] = useState('');
   const [searchName, setSearchName] = useState('');
 
-  // NEW: Check for pending invitations and show success modal
+  const getCurrentUserIdSafe = () => {
+    if (user?.id) return user.id;
+    if (getCurrentUserId) return getCurrentUserId();
+    return null;
+  };
+
   useEffect(() => {
     checkForInvitationSuccess();
   }, []);
@@ -36,7 +43,6 @@ export default function Dashboard() {
     checkForPendingInvitations();
   }, []);
 
-  // NEW: Check if user just accepted an invitation
   const checkForInvitationSuccess = () => {
     const invitationAccepted = sessionStorage.getItem('invitationAccepted');
     const projectJoined = sessionStorage.getItem('projectJoined');
@@ -47,7 +53,6 @@ export default function Dashboard() {
     }
   };
 
-  // NEW: Check for pending invitations after login
   const checkForPendingInvitations = async () => {
     const pendingInvitation = sessionStorage.getItem('pendingInvitation');
     
@@ -55,23 +60,18 @@ export default function Dashboard() {
       try {
         await invitationApi.processPendingInvitations();
         
-        // Show success modal if we have project name
         const projectName = sessionStorage.getItem('invitationProjectName');
         if (projectName) {
           setJoinedProjectName(projectName);
           setShowSuccessModal(true);
         }
         
-        // Clean up session storage
         sessionStorage.removeItem('pendingInvitation');
         sessionStorage.removeItem('invitationToken');
         sessionStorage.removeItem('invitationProjectName');
         
-        // Refresh projects to show newly joined project
         fetchProjects();
       } catch (err) {
-        console.error('Error processing pending invitations:', err);
-        // Clean up session storage even on error
         sessionStorage.removeItem('pendingInvitation');
         sessionStorage.removeItem('invitationToken');
         sessionStorage.removeItem('invitationProjectName');
@@ -79,46 +79,83 @@ export default function Dashboard() {
     }
   };
 
-  // Fetch projects from API
+  const separateProjects = (allProjects) => {
+    const currentUserId = getCurrentUserIdSafe();
+    
+    if (!currentUserId || !allProjects || allProjects.length === 0) {
+      return { myProjects: [], joinedProjects: [] };
+    }
+
+    const myProjects = allProjects.filter(project => {
+      const isOwner = project.owner && project.owner.id === currentUserId;
+      return isOwner;
+    });
+
+    const joinedProjects = allProjects.filter(project => {
+      const isNotOwner = !project.owner || project.owner.id !== currentUserId;
+      const isMember = project.team && project.team.some(member => member.id === currentUserId);
+      const isJoined = isNotOwner && isMember;
+      return isJoined;
+    });
+
+    return { myProjects, joinedProjects };
+  };
+
   const fetchProjects = async (category = '', tag = '') => {
     setLoading(true);
     try {
       const response = await projectApi.getAllProjects(category, tag);
       setProjects(response);
-      setFilteredProjects(response);
+      
+      const separated = separateProjects(response);
+      setFilteredProjects(separated);
     } catch (err) {
       setError(err.message || 'Failed to fetch projects');
       setProjects([]);
-      setFilteredProjects([]);
+      setFilteredProjects({ myProjects: [], joinedProjects: [] });
     } finally {
       setLoading(false);
     }
   };
 
-  // Apply filters to projects
   useEffect(() => {
-    let filtered = [...projects];
-
-    if (selectedCategory) {
-      filtered = filtered.filter(project => project.category === selectedCategory);
+    const currentUserId = getCurrentUserIdSafe();
+    if (!currentUserId) {
+      return;
     }
 
-    if (searchTag) {
-      filtered = filtered.filter(project =>
-        project.tags?.some(tag => tag.toLowerCase().includes(searchTag.toLowerCase()))
-      );
-    }
+    const { myProjects, joinedProjects } = separateProjects(projects);
+    
+    const applyFilters = (projectList) => {
+      let filtered = [...projectList];
 
-    if (searchName) {
-      filtered = filtered.filter(project =>
-        project.name.toLowerCase().includes(searchName.toLowerCase())
-      );
-    }
+      if (selectedCategory) {
+        filtered = filtered.filter(project => project.category === selectedCategory);
+      }
 
-    setFilteredProjects(filtered);
-  }, [projects, selectedCategory, searchTag, searchName]);
+      if (searchTag) {
+        filtered = filtered.filter(project =>
+          project.tags?.some(tag => tag.toLowerCase().includes(searchTag.toLowerCase()))
+        );
+      }
 
-  // Initial load
+      if (searchName) {
+        filtered = filtered.filter(project =>
+          project.name.toLowerCase().includes(searchName.toLowerCase())
+        );
+      }
+
+      return filtered;
+    };
+
+    const newFilteredProjects = {
+      myProjects: applyFilters(myProjects),
+      joinedProjects: applyFilters(joinedProjects)
+    };
+
+    setFilteredProjects(newFilteredProjects);
+  }, [projects, selectedCategory, searchTag, searchName, user]);
+
   useEffect(() => {
     fetchProjects();
   }, []);
@@ -131,12 +168,55 @@ export default function Dashboard() {
     setProjects(prev => prev.filter(project => project.id !== deletedProjectId));
   };
 
-  // NEW: Handle success modal close
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
     setJoinedProjectName('');
-    // Refresh projects to ensure newly joined project is displayed
     fetchProjects();
+  };
+
+  const getTotalProjectCount = () => {
+    return filteredProjects.myProjects.length + filteredProjects.joinedProjects.length;
+  };
+
+  const getOriginalTotalCount = () => {
+    return projects.length;
+  };
+
+  const hasActiveFilters = () => {
+    return selectedCategory || searchTag || searchName;
+  };
+
+  const clearAllFilters = () => {
+    setSelectedCategory('');
+    setSearchTag('');
+    setSearchName('');
+  };
+
+  const renderProjectSection = (title, projectList, emptyMessage) => {
+    if (projectList.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+          <span className="text-sm text-gray-500">
+            {projectList.length} project{projectList.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {projectList.map(project => (
+            <ProjectCard 
+              key={project.id} 
+              project={project} 
+              onDelete={handleProjectDelete}
+              currentUserId={getCurrentUserIdSafe()}
+            />
+          ))}
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -193,7 +273,6 @@ export default function Dashboard() {
             onProjectCreated={handleProjectCreated}
           />
         )}
-        {/* NEW: Success Modal */}
         <ProjectJoinSuccessModal
           isOpen={showSuccessModal}
           onClose={handleSuccessModalClose}
@@ -218,13 +297,12 @@ export default function Dashboard() {
         <div className="flex-1 p-6">
           <div className="max-w-6xl mx-auto">
             <div className="mb-6">
-              {/* Header section with title and stats */}
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Your Projects</h2>
                   <p className="text-gray-600 mt-1">
-                    {filteredProjects.length} of {projects.length} project{projects.length !== 1 ? 's' : ''}
-                    {(selectedCategory || searchTag || searchName) && ' (filtered)'}
+                    {getTotalProjectCount()} of {getOriginalTotalCount()} project{getOriginalTotalCount() !== 1 ? 's' : ''}
+                    {hasActiveFilters() && ' (filtered)'}
                   </p>
                 </div>
                 <Button onClick={() => setShowModal(true)} className="flex items-center gap-2">
@@ -233,13 +311,11 @@ export default function Dashboard() {
                 </Button>
               </div>
               
-              {/* Search bar section */}
               <div className="flex justify-center">
                 <SearchBar searchTerm={searchName} setSearchTerm={setSearchName} />
               </div>
             </div>
 
-            {/* Active Filters */}
             {(selectedCategory || searchTag) && (
               <div className="flex flex-wrap gap-2 mb-6">
                 {selectedCategory && (
@@ -257,12 +333,19 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Projects Grid */}
-            {filteredProjects.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredProjects.map(project => (
-                  <ProjectCard key={project.id} project={project} onDelete={handleProjectDelete} />
-                ))}
+            {getTotalProjectCount() > 0 ? (
+              <div>
+                {renderProjectSection(
+                  "My Projects", 
+                  filteredProjects.myProjects,
+                  "You haven't created any projects yet."
+                )}
+
+                {renderProjectSection(
+                  "Joined Projects", 
+                  filteredProjects.joinedProjects,
+                  "You haven't joined any projects yet."
+                )}
               </div>
             ) : (
               <div className="text-center py-12">
@@ -270,11 +353,7 @@ export default function Dashboard() {
                 <h3 className="text-lg font-medium text-gray-700 mb-2">No projects found</h3>
                 <p className="text-gray-500 mb-4">Try adjusting your filters or create a new project.</p>
                 <Button
-                  onClick={() => {
-                    setSelectedCategory('');
-                    setSearchTag('');
-                    setSearchName('');
-                  }}
+                  onClick={clearAllFilters}
                   variant="outline"
                 >
                   Clear Filters
@@ -291,7 +370,6 @@ export default function Dashboard() {
           onProjectCreated={handleProjectCreated}
         />
       )}
-      {/* NEW: Success Modal */}
       <ProjectJoinSuccessModal
         isOpen={showSuccessModal}
         onClose={handleSuccessModalClose}

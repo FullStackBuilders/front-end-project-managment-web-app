@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   DndContext,
@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, GripVertical } from 'lucide-react';
 import IssueCard from './IssueCard';
 import CreateIssueModal from './CreateIssueModal';
-import { updateIssueStatus, moveIssue, updateIssue } from '../store/issueSlice';
+import { updateIssueStatus, moveIssue, rollbackIssueMove, clearError } from '../store/issueSlice';
 import AuthService from '../services/AuthService';
 
 const COLUMNS = [
@@ -155,6 +155,7 @@ export default function KanbanBoard({ projectId }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingIssue, setEditingIssue] = useState(null);
   const [activeId, setActiveId] = useState(null);
+  const [dragError, setDragError] = useState(null);
   const dispatch = useDispatch();
   
   const { issues, loading, error } = useSelector(state => state.issues);
@@ -170,6 +171,18 @@ export default function KanbanBoard({ projectId }) {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Clear drag error after 3 seconds
+  useEffect(() => {
+    if (dragError) {
+      const timer = setTimeout(() => {
+        setDragError(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [dragError]);
+
+  // Remove the general error clearing effect since we're not setting general errors for drag operations anymore
 
   // Group issues by status
   const groupedIssues = useMemo(() => {
@@ -209,6 +222,9 @@ export default function KanbanBoard({ projectId }) {
       return;
     }
 
+    // Store original status for potential rollback
+    const originalStatus = activeIssue.status;
+
     // Determine the target column
     let targetColumn = null;
     
@@ -228,7 +244,7 @@ export default function KanbanBoard({ projectId }) {
       targetColumn = over.data.current.column.id;
     }
 
-    // If still no target column, don't proceed
+    // If still no target column or same column, don't proceed
     if (!targetColumn || targetColumn === activeIssue.status) {
       return;
     }
@@ -243,10 +259,17 @@ export default function KanbanBoard({ projectId }) {
     // Update on server
     try {
       await dispatch(updateIssueStatus({ issueId, status: newStatus })).unwrap();
+      setDragError(null); // Clear any previous drag errors
     } catch (error) {
-      // Revert on error - you might want to add proper error handling here
+      // Rollback the optimistic update
+      dispatch(rollbackIssueMove({ issueId, originalStatus }));
+      
+      // Show user-friendly drag-specific error message
+      let errorMessage = 'You don\'t have access to update this issue status';
+      
+      // Keep the original error for debugging but show user-friendly message
       console.error('Failed to update issue status:', error);
-      // You could dispatch an action to revert the optimistic update
+      setDragError(errorMessage);
     }
   };
 
@@ -288,9 +311,10 @@ export default function KanbanBoard({ projectId }) {
         </div>
       </div>
 
-      {error && (
+      {/* Error Messages - Only show drag errors here, not general errors */}
+      {dragError && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-600">{dragError}</p>
         </div>
       )}
 
