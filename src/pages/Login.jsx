@@ -59,7 +59,7 @@ export default function Login() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-6">
       {/* Header */}
       <div className="absolute top-6 left-6">
-        <h1 className="text-xl font-bold text-gray-800">Project Management Application</h1>
+        <h1 className="text-xl font-bold text-gray-800">TeamBoard</h1>
         <p className="text-sm text-gray-500">Manage your projects efficiently with our powerful tools</p>
       </div>
 

@@ -6,7 +6,7 @@ import { projectApi } from '../services/projectApi';
 export default function CreateProjectModal({ showModal, setShowModal, onProjectCreated }) {
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('Full Stack');
+  const [category, setCategory] = useState('');
   const [tags, setTags] = useState([]);
   const [currentTag, setCurrentTag] = useState('');
   const [tagWarning, setTagWarning] = useState('');
@@ -41,7 +41,7 @@ export default function CreateProjectModal({ showModal, setShowModal, onProjectC
   const resetForm = () => {
     setProjectName('');
     setDescription('');
-    setCategory('Full Stack');
+    setCategory('');
     setTags([]);
     setCurrentTag('');
     setTagWarning('');
@@ -52,11 +52,20 @@ export default function CreateProjectModal({ showModal, setShowModal, onProjectC
     e.preventDefault();
     setCreating(true);
     setError('');
+    
+    // Validate category is not empty or just whitespace/tabs
+    const trimmedCategory = category.replace(/[\s\t]+/g, ' ').trim();
+    if (!trimmedCategory) {
+      setError('Category cannot be empty or contain only spaces/tabs');
+      setCreating(false);
+      return;
+    }
+    
     try {
       await projectApi.createProject({
         name: projectName,
         description,
-        category,
+        category: trimmedCategory,
         tags,
       });
       setShowModal(false);
@@ -110,18 +119,15 @@ export default function CreateProjectModal({ showModal, setShowModal, onProjectC
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Category</label>
-            <select
+            <label className="block text-sm font-medium mb-1">Category *</label>
+            <input
+              type="text"
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               value={category}
               onChange={e => setCategory(e.target.value)}
-            >
-              <option value="Full Stack">Full Stack</option>
-              <option value="Front End">Front End</option>
-              <option value="Back End">Back End</option>
-              <option value="Mobile">Mobile</option>
-              <option value="DevOps">DevOps</option>
-            </select>
+              required
+              placeholder="Enter project category (e.g., Full Stack, Mobile, DevOps)"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Tags</label>

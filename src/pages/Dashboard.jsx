@@ -299,7 +299,7 @@ export default function Dashboard() {
             <div className="mb-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Your Projects</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
                   <p className="text-gray-600 mt-1">
                     {getTotalProjectCount()} of {getOriginalTotalCount()} project{getOriginalTotalCount() !== 1 ? 's' : ''}
                     {hasActiveFilters() && ' (filtered)'}
