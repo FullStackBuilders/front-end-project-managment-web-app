@@ -1,7 +1,8 @@
 // services/invitationApi.js
 import ApiService from './ApiService';
 
-const API_BASE_URL = 'http://localhost:8080';
+//const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 class InvitationApiService {
   // Send invitation (authenticated)
@@ -9,7 +10,7 @@ class InvitationApiService {
     return await ApiService.post('/api/invitations/send', invitationData);
   }
 
-  // Get invitation details (PUBLIC - no auth needed)
+  // Get invitation details
   async getInvitationDetails(token) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/invitations/details/${token}`);
@@ -26,7 +27,7 @@ class InvitationApiService {
     }
   }
 
-  // Accept invitation (PUBLIC - no auth needed)
+  // Accept invitation
   async acceptInvitation(token, userEmail) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/invitations/accept/${token}`, {

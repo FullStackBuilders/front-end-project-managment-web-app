@@ -10,7 +10,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import ManageProject from './pages/ManageProject';
-import AcceptInvitation from './pages/AcceptInvitation'; // NEW
+import AcceptInvitation from './pages/AcceptInvitation';
 
 function App() {
   return (
