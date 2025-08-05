@@ -1,4 +1,3 @@
-// pages/AcceptInvitation.jsx
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
