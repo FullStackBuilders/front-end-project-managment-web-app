@@ -1,4 +1,6 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
+import { INITIAL_FILTERS, applyFilters, countActiveFilters } from '../utils/issueFilters';
+import AuthService from '../services/AuthService';
 import { issueApi } from '../services/issueApi';
 
 // Fetch issues by projectId
@@ -85,13 +87,15 @@ const issueSlice = createSlice({
     issues: [],
     loading: false,
     error: null,
-    currentProjectId: null, // Track which project's issues we're showing
+    currentProjectId: null,
+    activeFilters: { ...INITIAL_FILTERS },
   },
   reducers: {
     clearIssues: (state) => {
       state.issues = [];
       state.error = null;
       state.currentProjectId = null;
+      state.activeFilters = { ...INITIAL_FILTERS };
     },
     clearError: (state) => {
       state.error = null;
@@ -111,6 +115,14 @@ const issueSlice = createSlice({
       if (issue) {
         issue.status = originalStatus;
       }
+    },
+    // Replace active filters entirely (called when user clicks Apply)
+    setFilters: (state, action) => {
+      state.activeFilters = action.payload;
+    },
+    // Reset all active filters to defaults
+    clearFilters: (state) => {
+      state.activeFilters = { ...INITIAL_FILTERS };
     },
   },
   extraReducers: (builder) => {
@@ -193,6 +205,24 @@ const issueSlice = createSlice({
   },
 });
 
-// Export all actions including moveIssue and rollbackIssueMove
-export const { clearIssues, clearError, moveIssue, rollbackIssueMove } = issueSlice.actions;
+export const {
+  clearIssues,
+  clearError,
+  moveIssue,
+  rollbackIssueMove,
+  setFilters,
+  clearFilters,
+} = issueSlice.actions;
+
 export default issueSlice.reducer;
+
+// ── Selectors ────────────────────────────────────────────────────────────────
+
+export const selectFilteredIssues = createSelector(
+  (state) => state.issues.issues,
+  (state) => state.issues.activeFilters,
+  (issues, filters) => applyFilters(issues, filters, AuthService.getCurrentUserId())
+);
+
+export const selectActiveFilterCount = (state) =>
+  countActiveFilters(state.issues.activeFilters);

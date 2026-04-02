@@ -24,7 +24,7 @@ import { Plus, GripVertical } from 'lucide-react';
 import IssueCard from './IssueCard';
 import CreateIssueModal from './CreateIssueModal';
 import ErrorModal from './ErrorModal';
-import { updateIssueStatus, moveIssue, rollbackIssueMove, clearError } from '../store/issueSlice';
+import { updateIssueStatus, moveIssue, rollbackIssueMove, clearError, selectFilteredIssues } from '../store/issueSlice';
 import AuthService from '../services/AuthService';
 
 const COLUMNS = [
@@ -159,7 +159,8 @@ export default function KanbanBoard({ projectId }) {
   const [dragError, setDragError] = useState(null);
   const dispatch = useDispatch();
 
-  const { issues, loading, error } = useSelector(state => state.issues);
+  const { loading, error } = useSelector(state => state.issues);
+  const issues = useSelector(selectFilteredIssues);
   const { currentProject } = useSelector(state => state.project);
 
   const allMembers = useMemo(() => {
@@ -317,7 +318,7 @@ export default function KanbanBoard({ projectId }) {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Tasks Board</h2>
         <div className="text-sm text-gray-500">
-          Total Task{issues.length !== 1 ? 's' : ''} :  {issues.length}
+          Total Task{issues.length !== 1 ? 's' : ''}:  {issues.length}
         </div>
       </div>
 

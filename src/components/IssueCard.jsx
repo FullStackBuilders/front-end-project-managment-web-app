@@ -48,7 +48,7 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
       await dispatch(deleteIssue(issue.id)).unwrap();
       setShowDeleteModal(false);
     } catch (error) {
-      console.error("Failed to delete issue:", error);
+      console.error("Failed to delete task:", error);
     } finally {
       setIsDeleting(false);
     }
@@ -238,12 +238,12 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
         showModal={showDeleteModal}
         setShowModal={setShowDeleteModal}
         onConfirm={handleDeleteConfirm}
-        title="Delete Issue"
-        message={`Are you sure you want to delete the issue "${issue.title}"?`}
-        warningMessage="This action cannot be undone. The issue and all its associated data will be permanently deleted from the project."
-        confirmText="Delete Issue"
+        title="Delete Task"
+        message={`Are you sure you want to delete the task "${issue.title}"?`}
+        warningMessage="This action cannot be undone. The task and all its associated data will be permanently deleted from the project."
+        confirmText="Delete Task"
         isDeleting={isDeleting}
-        itemType="issue"
+        itemType="task"
       />
 
       {/* Issue Detail Modal */}

@@ -7,6 +7,7 @@ import ChatBox from '../components/ChatBox';
 import KanbanBoard from '../components/KanbanBoard';
 import IssueListView from '../components/IssueListView';
 import CalendarView from '../components/CalendarView';
+import IssueFilterButton from '../components/IssueFilterButton';
 import { fetchProjectById } from '../store/projectSlice';
 import { fetchIssuesByProject, clearIssues } from '../store/issueSlice';
 import { fetchChatMessages } from '../store/chatSlice';
@@ -133,19 +134,24 @@ export default function ManageProject() {
 
         {/* Board / List / Calendar Tabs */}
         <div className="mt-8">
-          <div className="flex gap-1 mb-4 border-b border-gray-200">
-            {['board', 'list', 'calendar'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors cursor-pointer
-                  ${activeTab === tab
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-              >
-                {tab}
-              </button>
-            ))}
+          <div className="flex items-center justify-between mb-4 border-b border-gray-200">
+            <div className="flex gap-1">
+              {['board', 'list', 'calendar'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors cursor-pointer
+                    ${activeTab === tab
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <div className="pb-1">
+              <IssueFilterButton view={activeTab} />
+            </div>
           </div>
 
           {activeTab === 'board' && <KanbanBoard projectId={projectId} />}

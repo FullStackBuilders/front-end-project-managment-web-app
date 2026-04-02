@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
+import { selectFilteredIssues } from '../store/issueSlice';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isBefore, isToday } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, Flag } from 'lucide-react';
 import IssueDetailModal from './IssueDetailModal';
@@ -101,30 +102,24 @@ function TaskChip({ task, onClick }) {
 
 // ── Main CalendarView ─────────────────────────────────────────────────────────
 export default function CalendarView() {
-  const { issues } = useSelector((state) => state.issues);
+  const issues = useSelector(selectFilteredIssues);
 
   const [displayDate, setDisplayDate] = useState(new Date());
   const [dayDetailTasks, setDayDetailTasks] = useState(null);  // array | null
   const [dayDetailLabel, setDayDetailLabel] = useState('');
   const [detailIssueId, setDetailIssueId] = useState(null);
 
-  // Filter: non-completed tasks only
-  const activeTasks = useMemo(
-    () => issues.filter((issue) => issue.status !== 'DONE'),
-    [issues]
-  );
-
-  // Group by YYYY-MM-DD
+  // Group by YYYY-MM-DD — filtering is now handled by selectFilteredIssues
   const tasksByDate = useMemo(() => {
     const map = {};
-    activeTasks.forEach((issue) => {
+    issues.forEach((issue) => {
       if (!issue.dueDate) return;
       const key = issue.dueDate.split('T')[0];
       if (!map[key]) map[key] = [];
       map[key].push(issue);
     });
     return map;
-  }, [activeTasks]);
+  }, [issues]);
 
   const monthGrid = useMemo(() => buildMonthGrid(displayDate), [displayDate]);
 

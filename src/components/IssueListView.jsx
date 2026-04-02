@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Plus, Flag, SlidersHorizontal } from 'lucide-react';
+import { Plus, Flag, SlidersHorizontal, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatSmartTimestamp } from '../utils/dateUtils';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,7 @@ import {
   updateIssueStatus,
   addAssignee,
   deleteIssue,
+  selectFilteredIssues,
 } from '../store/issueSlice';
 import CreateIssueModal from './CreateIssueModal';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
@@ -26,6 +27,41 @@ const COLUMN_DEFINITIONS = [
   { id: 'lastEditedBy', label: 'Last Edited By', defaultVisible: false },
   { id: 'lastEditedAt', label: 'Last Edited At', defaultVisible: false },
 ];
+
+const SORTABLE_COLUMNS = new Set([
+  'name', 'priority', 'assignedTo', 'createdBy', 'dueDate', 'lastEditedBy', 'lastEditedAt',
+]);
+
+// Lower number = sorts first when ascending (High → Medium → Low)
+const PRIORITY_ORDER = { HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+// First-click direction: 'asc' for most columns, 'desc' for "newest first" timestamp
+const SORT_DEFAULT_DIR = { lastEditedAt: 'desc' };
+
+const getSortValue = (issue, col) => {
+  switch (col) {
+    case 'name':         return (issue.title || '').toLowerCase();
+    case 'priority':     return PRIORITY_ORDER[issue.priority] ?? 99;
+    case 'assignedTo':   return (issue.assigneeName || '').toLowerCase();
+    case 'createdBy':    return (issue.createdByName || '').toLowerCase();
+    case 'dueDate':      return issue.dueDate
+                           ? new Date(issue.dueDate + 'T00:00:00').getTime()
+                           : Infinity;   // nulls last when ascending
+    case 'lastEditedBy': return (issue.lastEditedByName || '').toLowerCase();
+    case 'lastEditedAt': return issue.lastEditedAt
+                           ? new Date(issue.lastEditedAt).getTime()
+                           : 0;         // never-edited sorts oldest
+    default: return '';
+  }
+};
+
+function SortIcon({ col, sortCol, sortDir }) {
+  if (sortCol !== col)
+    return <ChevronsUpDown className="w-3 h-3 opacity-50 flex-shrink-0" />;
+  return sortDir === 'asc'
+    ? <ChevronUp   className="w-3 h-3 text-primary flex-shrink-0" />
+    : <ChevronDown className="w-3 h-3 text-primary flex-shrink-0" />;
+}
 
 const STATUS_OPTIONS = ['TO_DO', 'IN_PROGRESS', 'DONE'];
 const PRIORITY_OPTIONS = ['HIGH', 'MEDIUM', 'LOW'];
@@ -129,7 +165,7 @@ function memberFullName(member) {
 export default function IssueListView({ projectId }) {
   const dispatch = useDispatch();
   const { isCreator, isProjectOwner } = useAuth();
-  const { issues } = useSelector((state) => state.issues);
+  const issues = useSelector(selectFilteredIssues);
   const { currentProject } = useSelector((state) => state.project);
 
   const [editingRowId, setEditingRowId] = useState(null);
@@ -140,6 +176,9 @@ export default function IssueListView({ projectId }) {
   const [saveError, setSaveError] = useState(null);   // string | null
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [sortCol, setSortCol] = useState(null);  // column id or null
+  const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
 
   const [visibleColumns, setVisibleColumns] = useState(() => {
     try {
@@ -161,6 +200,17 @@ export default function IssueListView({ projectId }) {
     const seen = new Set([owner.id]);
     return [owner, ...team.filter((m) => !seen.has(m.id))];
   }, [currentProject]);
+
+  const sortedIssues = useMemo(() => {
+    if (!sortCol) return issues;
+    return [...issues].sort((a, b) => {
+      const va = getSortValue(a, sortCol);
+      const vb = getSortValue(b, sortCol);
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ?  1 : -1;
+      return 0;
+    });
+  }, [issues, sortCol, sortDir]);
 
   // Close expanded cell on outside click
   useEffect(() => {
@@ -199,6 +249,15 @@ export default function IssueListView({ projectId }) {
     issue.dueDate &&
     issue.status !== 'DONE' &&
     new Date(issue.dueDate + 'T00:00:00') < new Date();
+
+  const toggleSort = (col) => {
+    if (sortCol === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortCol(col);
+      setSortDir(SORT_DEFAULT_DIR[col] ?? 'asc');
+    }
+  };
 
   const startEdit = (issue) => {
     setSaveError(null);
@@ -288,7 +347,7 @@ export default function IssueListView({ projectId }) {
 
 
   return (
-    <div ref={containerRef} onClick={() => setExpandedCell(null)}>
+    <div ref={containerRef} onClick={() => setExpandedCell(null)} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       {/* Header row */}
       <div className="flex justify-between items-center mb-4">
         {/* Column visibility toggle */}
@@ -335,22 +394,71 @@ export default function IssueListView({ projectId }) {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">ID</th>
-                {col('name') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Name</th>}
+                {col('name') && (
+                  <th
+                    onClick={() => toggleSort('name')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Name <SortIcon col="name" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
                 {col('status') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Status</th>}
-                {col('priority') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Priority</th>}
-                {col('assignedTo') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Assigned To</th>}
-                {col('createdBy') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Created By</th>}
-                {col('dueDate') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Due Date</th>}
+                {col('priority') && (
+                  <th
+                    onClick={() => toggleSort('priority')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Priority <SortIcon col="priority" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
+                {col('assignedTo') && (
+                  <th
+                    onClick={() => toggleSort('assignedTo')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Assigned To <SortIcon col="assignedTo" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
+                {col('createdBy') && (
+                  <th
+                    onClick={() => toggleSort('createdBy')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Created By <SortIcon col="createdBy" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
+                {col('dueDate') && (
+                  <th
+                    onClick={() => toggleSort('dueDate')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Due Date <SortIcon col="dueDate" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
                 {col('description') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Description</th>}
-                {col('lastEditedBy') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Last Edited By</th>}
-                {col('lastEditedAt') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Last Edited At</th>}
+                {col('lastEditedBy') && (
+                  <th
+                    onClick={() => toggleSort('lastEditedBy')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Last Edited By <SortIcon col="lastEditedBy" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
+                {col('lastEditedAt') && (
+                  <th
+                    onClick={() => toggleSort('lastEditedAt')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Last Edited At <SortIcon col="lastEditedAt" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
                 {showActionsColumn && (
                   <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Actions</th>
                 )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {issues.map((issue) => {
+              {sortedIssues.map((issue) => {
                 const editing = editingRowId === issue.id;
                 const overdue = isOverdue(issue);
                 const rowBg = editing
