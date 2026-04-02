@@ -1,33 +1,50 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Plus, FolderOpen } from 'lucide-react';
-import { projectApi } from '../services/projectApi';
-import { useAuth } from '../../src/context/AuthContext';
-import Header from '../components/Header';
-import FilterPanel from '../components/FilterPanel';
-import ProjectCard from '../components/ProjectCard';
-import CreateProjectModal from '@/components/CreateProjectModal';
-import SearchBar from '../components/SearchBar';
-import ProjectJoinSuccessModal from '../components/ProjectJoinSuccessModal';
-import invitationApi from '../services/invitationApi';
+import { useState, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { Button } from "@/components/ui/button";
+import { Plus, FolderOpen } from "lucide-react";
+import { projectApi } from "../services/projectApi";
+import { useAuth } from "../../src/context/AuthContext";
+import Header from "../components/Header";
+import FilterPanel from "../components/FilterPanel";
+import ProjectCard from "../components/ProjectCard";
+import CreateProjectModal from "@/components/CreateProjectModal";
+import SearchBar from "../components/SearchBar";
+import ProjectJoinSuccessModal from "../components/ProjectJoinSuccessModal";
+import ProjectJoinFailedModal from "../components/ProjectJoinFailedModal";
+import invitationApi from "../services/invitationApi";
+import IssueCountCards from "../components/IssueCountCards";
+import { fetchIssueCounts } from "../store/issueCountSlice";
 
 export default function Dashboard() {
   const { user, getCurrentUserId } = useAuth();
+  const dispatch = useDispatch();
+  const { counts, loading: countsLoading } = useSelector(
+    (state) => state.issueCounts,
+  );
+
   const [projects, setProjects] = useState([]);
   const [filteredProjects, setFilteredProjects] = useState({
     myProjects: [],
-    joinedProjects: []
+    joinedProjects: [],
   });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [joinedProjectName, setJoinedProjectName] = useState('');
+  const [joinedProjectName, setJoinedProjectName] = useState("");
 
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [searchTag, setSearchTag] = useState('');
-  const [searchName, setSearchName] = useState('');
+  const [showFailedModal, setShowFailedModal] = useState(false);
+  const [failedProjectName, setFailedProjectName] = useState('');
+  const [failedAction, setFailedAction] = useState('');
+
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [searchTag, setSearchTag] = useState("");
+  const [searchName, setSearchName] = useState("");
+
+  useEffect(() => {
+    dispatch(fetchIssueCounts());
+  }, []);
 
   const getCurrentUserIdSafe = () => {
     if (user?.id) return user.id;
@@ -40,60 +57,84 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    checkForInvitationJoinFailed();
+  }, []);
+
+  useEffect(() => {
     checkForPendingInvitations();
   }, []);
 
   const checkForInvitationSuccess = () => {
-    const invitationAccepted = sessionStorage.getItem('invitationAccepted');
-    const projectJoined = sessionStorage.getItem('projectJoined');
+    const invitationAccepted = sessionStorage.getItem("invitationAccepted");
+    const projectJoined = sessionStorage.getItem("projectJoined");
 
-    if (invitationAccepted === 'true' && projectJoined) {
+    if (invitationAccepted === "true" && projectJoined) {
       setJoinedProjectName(projectJoined);
       setShowSuccessModal(true);
     }
   };
 
+  const checkForInvitationJoinFailed = () => {
+    const joinFailed = sessionStorage.getItem('invitationJoinFailed');
+    const projectName = sessionStorage.getItem('invitationFailedProjectName');
+    const action = sessionStorage.getItem('invitationFailedAction') || 'sign up';
+    if (joinFailed === 'true' && projectName) {
+      setFailedProjectName(projectName);
+      setFailedAction(action);
+      setShowFailedModal(true);
+      sessionStorage.removeItem('invitationJoinFailed');
+      sessionStorage.removeItem('invitationFailedProjectName');
+      sessionStorage.removeItem('invitationFailedAction');
+    }
+  };
+
   const checkForPendingInvitations = async () => {
-    const pendingInvitation = sessionStorage.getItem('pendingInvitation');
-    
-    if (pendingInvitation === 'true') {
+    const pendingInvitation = sessionStorage.getItem("pendingInvitation");
+
+    if (pendingInvitation === "true") {
       try {
-        await invitationApi.processPendingInvitations();
-        
-        const projectName = sessionStorage.getItem('invitationProjectName');
-        if (projectName) {
+        const response = await invitationApi.processPendingInvitations();
+        const projectName = sessionStorage.getItem("invitationProjectName");
+
+        if (response.data === true && projectName) {
           setJoinedProjectName(projectName);
           setShowSuccessModal(true);
+        } else if (response.data === false && projectName) {
+          setFailedProjectName(projectName);
+          setFailedAction('log in');
+          setShowFailedModal(true);
         }
-        
-        sessionStorage.removeItem('pendingInvitation');
-        sessionStorage.removeItem('invitationToken');
-        sessionStorage.removeItem('invitationProjectName');
-        
+
+        sessionStorage.removeItem("pendingInvitation");
+        sessionStorage.removeItem("invitationToken");
+        sessionStorage.removeItem("invitationProjectName");
+
         fetchProjects();
       } catch (err) {
-        sessionStorage.removeItem('pendingInvitation');
-        sessionStorage.removeItem('invitationToken');
-        sessionStorage.removeItem('invitationProjectName');
+        sessionStorage.removeItem("pendingInvitation");
+        sessionStorage.removeItem("invitationToken");
+        sessionStorage.removeItem("invitationProjectName");
       }
     }
   };
 
   const separateProjects = (allProjects) => {
     const currentUserId = getCurrentUserIdSafe();
-    
+
     if (!currentUserId || !allProjects || allProjects.length === 0) {
       return { myProjects: [], joinedProjects: [] };
     }
 
-    const myProjects = allProjects.filter(project => {
+    const myProjects = allProjects.filter((project) => {
       const isOwner = project.owner && project.owner.id === currentUserId;
       return isOwner;
     });
 
-    const joinedProjects = allProjects.filter(project => {
+    const joinedProjects = allProjects.filter((project) => {
       const isNotOwner = !project.owner || project.owner.id !== currentUserId;
-      const isMember = project.team && project.team.some(member => member.id === currentUserId);
+      const isMember =
+        project.team &&
+        project.team.some((member) => member.id === currentUserId);
       const isJoined = isNotOwner && isMember;
       return isJoined;
     });
@@ -101,16 +142,16 @@ export default function Dashboard() {
     return { myProjects, joinedProjects };
   };
 
-  const fetchProjects = async (category = '', tag = '') => {
+  const fetchProjects = async (category = "", tag = "") => {
     setLoading(true);
     try {
       const response = await projectApi.getAllProjects(category, tag);
       setProjects(response);
-      
+
       const separated = separateProjects(response);
       setFilteredProjects(separated);
     } catch (err) {
-      setError(err.message || 'Failed to fetch projects');
+      setError(err.message || "Failed to fetch projects");
       setProjects([]);
       setFilteredProjects({ myProjects: [], joinedProjects: [] });
     } finally {
@@ -125,23 +166,27 @@ export default function Dashboard() {
     }
 
     const { myProjects, joinedProjects } = separateProjects(projects);
-    
+
     const applyFilters = (projectList) => {
       let filtered = [...projectList];
 
       if (selectedCategory) {
-        filtered = filtered.filter(project => project.category === selectedCategory);
+        filtered = filtered.filter(
+          (project) => project.category === selectedCategory,
+        );
       }
 
       if (searchTag) {
-        filtered = filtered.filter(project =>
-          project.tags?.some(tag => tag.toLowerCase().includes(searchTag.toLowerCase()))
+        filtered = filtered.filter((project) =>
+          project.tags?.some((tag) =>
+            tag.toLowerCase().includes(searchTag.toLowerCase()),
+          ),
         );
       }
 
       if (searchName) {
-        filtered = filtered.filter(project =>
-          project.name.toLowerCase().includes(searchName.toLowerCase())
+        filtered = filtered.filter((project) =>
+          project.name.toLowerCase().includes(searchName.toLowerCase()),
         );
       }
 
@@ -150,7 +195,7 @@ export default function Dashboard() {
 
     const newFilteredProjects = {
       myProjects: applyFilters(myProjects),
-      joinedProjects: applyFilters(joinedProjects)
+      joinedProjects: applyFilters(joinedProjects),
     };
 
     setFilteredProjects(newFilteredProjects);
@@ -165,20 +210,25 @@ export default function Dashboard() {
   };
 
   const handleProjectDelete = (deletedProjectId) => {
-    setProjects(prev => prev.filter(project => project.id !== deletedProjectId));
+    setProjects((prev) =>
+      prev.filter((project) => project.id !== deletedProjectId),
+    );
   };
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
-    setJoinedProjectName('');
+    setJoinedProjectName("");
     fetchProjects();
   };
 
   const getTotalProjectCount = () => {
-    return filteredProjects.myProjects.length + filteredProjects.joinedProjects.length;
+    return (
+      filteredProjects.myProjects.length +
+      filteredProjects.joinedProjects.length
+    );
   };
 
-  const getOriginalTotalCount = () => {
+  const getUserProjectCount = () => {
     return projects.length;
   };
 
@@ -187,9 +237,9 @@ export default function Dashboard() {
   };
 
   const clearAllFilters = () => {
-    setSelectedCategory('');
-    setSearchTag('');
-    setSearchName('');
+    setSelectedCategory("");
+    setSearchTag("");
+    setSearchName("");
   };
 
   const renderProjectSection = (title, projectList, emptyMessage) => {
@@ -202,14 +252,14 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
           <span className="text-sm text-gray-500">
-            {projectList.length} project{projectList.length !== 1 ? 's' : ''}
+            {projectList.length} project{projectList.length !== 1 ? "s" : ""}
           </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projectList.map(project => (
-            <ProjectCard 
-              key={project.id} 
-              project={project} 
+          {projectList.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
               onDelete={handleProjectDelete}
               currentUserId={getCurrentUserIdSafe()}
             />
@@ -250,7 +300,10 @@ export default function Dashboard() {
   if (projects.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header onProjectCreated={handleProjectCreated} setShowModal={setShowModal} />
+        <Header
+          onProjectCreated={handleProjectCreated}
+          setShowModal={setShowModal}
+        />
         <div className="flex flex-col items-center justify-center h-96">
           <div className="mb-6 text-center">
             <FolderOpen size={64} className="text-gray-300 mx-auto mb-4" />
@@ -258,10 +311,15 @@ export default function Dashboard() {
               You don't have any projects yet
             </h2>
             <p className="text-gray-500 mb-6">
-              Start by creating your first project to begin organizing your work.
+              Start by creating your first project to begin organizing your
+              work.
             </p>
           </div>
-          <Button onClick={() => setShowModal(true)} className="flex items-center gap-2" size="lg">
+          <Button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2"
+            size="lg"
+          >
             <Plus size={20} />
             Create Your First Project
           </Button>
@@ -277,6 +335,12 @@ export default function Dashboard() {
           isOpen={showSuccessModal}
           onClose={handleSuccessModalClose}
           projectName={joinedProjectName}
+        />
+        <ProjectJoinFailedModal
+          isOpen={showFailedModal}
+          onClose={() => setShowFailedModal(false)}
+          projectName={failedProjectName}
+          action={failedAction}
         />
       </div>
     );
@@ -299,35 +363,64 @@ export default function Dashboard() {
             <div className="mb-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Dashboard
+                  </h2>
                   <p className="text-gray-600 mt-1">
-                    {getTotalProjectCount()} of {getOriginalTotalCount()} project{getOriginalTotalCount() !== 1 ? 's' : ''}
-                    {hasActiveFilters() && ' (filtered)'}
+                    {getTotalProjectCount()} of {getUserProjectCount()} project
+                    {getUserProjectCount() !== 1 ? "s" : ""}
+                    {hasActiveFilters() && " (filtered)"}
                   </p>
                 </div>
-                <Button onClick={() => setShowModal(true)} className="flex items-center gap-2">
+                <Button
+                  onClick={() => setShowModal(true)}
+                  className="flex items-center gap-2"
+                >
                   <Plus size={16} />
                   Create Project
                 </Button>
               </div>
-              
+
               <div className="flex justify-center">
-                <SearchBar searchTerm={searchName} setSearchTerm={setSearchName} />
+                <SearchBar
+                  searchTerm={searchName}
+                  setSearchTerm={setSearchName}
+                />
               </div>
             </div>
+
+            {getUserProjectCount() > 0 && (
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold text-gray-800 mb-4">
+                  My Task Summary
+                </h3>
+
+                <IssueCountCards counts={counts} loading={countsLoading} />
+              </div>
+            )}
 
             {(selectedCategory || searchTag) && (
               <div className="flex flex-wrap gap-2 mb-6">
                 {selectedCategory && (
                   <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
                     Category: {selectedCategory}
-                    <button onClick={() => setSelectedCategory('')} className="text-blue-600 hover:text-blue-800 ml-1">×</button>
+                    <button
+                      onClick={() => setSelectedCategory("")}
+                      className="text-blue-600 hover:text-blue-800 ml-1"
+                    >
+                      ×
+                    </button>
                   </div>
                 )}
                 {searchTag && (
                   <div className="flex items-center gap-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
                     Tag: {searchTag}
-                    <button onClick={() => setSearchTag('')} className="text-green-600 hover:text-green-800 ml-1">×</button>
+                    <button
+                      onClick={() => setSearchTag("")}
+                      className="text-green-600 hover:text-green-800 ml-1"
+                    >
+                      ×
+                    </button>
                   </div>
                 )}
               </div>
@@ -336,26 +429,27 @@ export default function Dashboard() {
             {getTotalProjectCount() > 0 ? (
               <div>
                 {renderProjectSection(
-                  "My Projects", 
+                  "My Projects",
                   filteredProjects.myProjects,
-                  "You haven't created any projects yet."
+                  "You haven't created any projects yet.",
                 )}
 
                 {renderProjectSection(
-                  "Joined Projects", 
+                  "Joined Projects",
                   filteredProjects.joinedProjects,
-                  "You haven't joined any projects yet."
+                  "You haven't joined any projects yet.",
                 )}
               </div>
             ) : (
               <div className="text-center py-12">
                 <FolderOpen size={48} className="text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-700 mb-2">No projects found</h3>
-                <p className="text-gray-500 mb-4">Try adjusting your filters or create a new project.</p>
-                <Button
-                  onClick={clearAllFilters}
-                  variant="outline"
-                >
+                <h3 className="text-lg font-medium text-gray-700 mb-2">
+                  No projects found
+                </h3>
+                <p className="text-gray-500 mb-4">
+                  Try adjusting your filters or create a new project.
+                </p>
+                <Button onClick={clearAllFilters} variant="outline">
                   Clear Filters
                 </Button>
               </div>
@@ -374,6 +468,12 @@ export default function Dashboard() {
         isOpen={showSuccessModal}
         onClose={handleSuccessModalClose}
         projectName={joinedProjectName}
+      />
+      <ProjectJoinFailedModal
+        isOpen={showFailedModal}
+        onClose={() => setShowFailedModal(false)}
+        projectName={failedProjectName}
+        action={failedAction}
       />
     </div>
   );

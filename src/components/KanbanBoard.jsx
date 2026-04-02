@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, GripVertical } from 'lucide-react';
 import IssueCard from './IssueCard';
 import CreateIssueModal from './CreateIssueModal';
+import ErrorModal from './ErrorModal';
 import { updateIssueStatus, moveIssue, rollbackIssueMove, clearError } from '../store/issueSlice';
 import AuthService from '../services/AuthService';
 
@@ -112,7 +113,7 @@ function DroppableColumn({ column, issues, projectId, onCreateIssue, onEditIssue
             size="sm"
           >
             <Plus className="w-4 h-4" />
-            Create Issue
+            Create Task
           </Button>
         )}
       </div>
@@ -140,9 +141,9 @@ function DroppableColumn({ column, issues, projectId, onCreateIssue, onEditIssue
         {/* Empty State */}
         {(!issues || issues.length === 0) && (
           <div className="text-center text-gray-400 mt-8">
-            <p className="text-sm">No issues</p>
+            <p className="text-sm">No Tasks</p>
             {column.id === 'TO_DO' && (
-              <p className="text-xs mt-1">Create your first issue!</p>
+              <p className="text-xs mt-1">Create your first task!</p>
             )}
           </div>
         )}
@@ -157,8 +158,17 @@ export default function KanbanBoard({ projectId }) {
   const [activeId, setActiveId] = useState(null);
   const [dragError, setDragError] = useState(null);
   const dispatch = useDispatch();
-  
+
   const { issues, loading, error } = useSelector(state => state.issues);
+  const { currentProject } = useSelector(state => state.project);
+
+  const allMembers = useMemo(() => {
+    const owner = currentProject?.owner;
+    const team = currentProject?.team || [];
+    if (!owner) return team;
+    const seen = new Set([owner.id]);
+    return [owner, ...team.filter((m) => !seen.has(m.id))];
+  }, [currentProject]);
 
   // Configure sensors for drag and drop
   const sensors = useSensors(
@@ -265,10 +275,10 @@ export default function KanbanBoard({ projectId }) {
       dispatch(rollbackIssueMove({ issueId, originalStatus }));
       
       // Show user-friendly drag-specific error message
-      let errorMessage = 'You don\'t have access to update this issue status';
+      let errorMessage = 'You don\'t have access to update this task status';
       
       // Keep the original error for debugging but show user-friendly message
-      console.error('Failed to update issue status:', error);
+      console.error('Failed to update task status:', error);
       setDragError(errorMessage);
     }
   };
@@ -292,7 +302,7 @@ export default function KanbanBoard({ projectId }) {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-          <p className="text-gray-600">Loading issues...</p>
+          <p className="text-gray-600">Loading tasks...</p>
         </div>
       </div>
     );
@@ -305,18 +315,20 @@ export default function KanbanBoard({ projectId }) {
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Issues Board</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Tasks Board</h2>
         <div className="text-sm text-gray-500">
-          {issues.length} issue{issues.length !== 1 ? 's' : ''} total
+          Total Task{issues.length !== 1 ? 's' : ''} :  {issues.length}
         </div>
       </div>
 
-      {/* Error Messages - Only show drag errors here, not general errors */}
-      {dragError && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-sm text-red-600">{dragError}</p>
-        </div>
-      )}
+      {/* Drag error modal */}
+      <ErrorModal
+        open={!!dragError}
+        onClose={() => setDragError(null)}
+        title="Failed to move task"
+        message={dragError}
+        onRetry={null}
+      />
 
       <DndContext
         sensors={sensors}
@@ -361,6 +373,7 @@ export default function KanbanBoard({ projectId }) {
           setShowModal={handleCloseModal}
           projectId={projectId}
           editingIssue={editingIssue}
+          projectMembers={allMembers}
         />
       )}
     </div>

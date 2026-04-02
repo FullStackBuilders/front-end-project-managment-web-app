@@ -25,11 +25,7 @@ export default function Register() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  useEffect(() => {
-    if (location.state?.invitationEmail) {
-      setFormData(prev => ({ ...prev, email: location.state.invitationEmail }));
-    }
-  }, [location.state]);
+  // No email pre-fill for invitation flow — user must use the correct email themselves
 
   const handleChange = (e) => {
     setFormData({
@@ -84,30 +80,33 @@ export default function Register() {
     
     if (invitationToken) {
       try {
-        console.log('Accepting invitation with token:', invitationToken, 'for email:', userEmail);
         const response = await invitationApi.acceptInvitation(invitationToken, userEmail);
-        console.log('Invitation acceptance response:', response);
-        
         const acceptanceData = response.data;
 
-        // Store project information for success modal
+        // Store success flags for Dashboard to show the success modal
         sessionStorage.setItem('invitationAccepted', 'true');
         sessionStorage.setItem('projectJoined', acceptanceData.projectName);
 
-        // Clear invitation token since it's been used
+        // Clear invitation keys since they've been used
         sessionStorage.removeItem('invitationToken');
         sessionStorage.removeItem('pendingInvitation');
         sessionStorage.removeItem('invitationProjectName');
-        
-        console.log('Successfully stored invitation acceptance data');
+
         return true;
       } catch (err) {
-        console.error('Failed to accept invitation after registration:', err);
-        // Don't throw here - let the user proceed to dashboard
+        // Invitation acceptance failed (likely email mismatch) — store failure context
+        // so Dashboard can show the appropriate failure modal
+        const failedProjectName = sessionStorage.getItem('invitationProjectName');
+        if (failedProjectName) {
+          sessionStorage.setItem('invitationJoinFailed', 'true');
+          sessionStorage.setItem('invitationFailedProjectName', failedProjectName);
+          sessionStorage.setItem('invitationFailedAction', 'sign up');
+        }
+        sessionStorage.removeItem('pendingInvitation');
+        sessionStorage.removeItem('invitationToken');
+        sessionStorage.removeItem('invitationProjectName');
         return false;
       }
-    } else {
-      console.log('No invitation token found in sessionStorage');
     }
     return false;
   };
@@ -121,24 +120,14 @@ export default function Register() {
 
     try {
       const { confirmPassword, ...registrationData } = formData;
-      console.log('Starting registration process...');
-      
       const { response, userInfo } = await register(registrationData);
-      console.log('Registration successful, userInfo:', userInfo);
-      
-      // Check if there's a pending invitation to handle
+
+      // If there's a pending invitation, attempt to accept it with the new user's email
       const pendingInvitation = sessionStorage.getItem('pendingInvitation');
-      console.log('Pending invitation status:', pendingInvitation);
-      
       if (pendingInvitation === 'true' && userInfo?.email) {
-        console.log('Processing pending invitation for:', userInfo.email);
-        // Try to accept the invitation with the newly registered user's email
-        const invitationResult = await handleInvitationAfterRegistration(userInfo.email);
-        console.log('Invitation processing result:', invitationResult);
+        await handleInvitationAfterRegistration(userInfo.email);
       }
-      
-      // Always navigate to dashboard
-      console.log('Navigating to dashboard...');
+
       navigate('/dashboard');
       
     } catch (err) {
@@ -157,25 +146,14 @@ export default function Register() {
         <p className="text-sm text-gray-500">Manage your projects efficiently with our powerful tools</p>
       </div>
 
-      {/* Show invitation banner if coming from invitation */}
-      {location.state?.showInvitationBanner && (
-        <div className="w-full max-w-md mb-4 mt-16">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-blue-800 text-sm text-center">
-              <strong>You're joining:</strong> {location.state.projectName}
-            </p>
-          </div>
-        </div>
-      )}
-
-      <Card className="w-full max-w-md mt-4">
+      <Card className="w-full max-w-md mt-16">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">
             Create an account
           </CardTitle>
           <CardDescription className="text-center">
-            {location.state?.showInvitationBanner 
-              ? "Create your account to join the project"
+            {location.state?.isInvitationFlow
+              ? "Sign up to join the project"
               : "Join us to manage your projects efficiently"
             }
           </CardDescription>
@@ -224,7 +202,7 @@ export default function Register() {
                 placeholder="Enter your email"
                 value={formData.email}
                 onChange={handleChange}
-                disabled={isLoading || location.state?.invitationEmail} // Disable if pre-filled from invitation
+                disabled={isLoading}
                 autoComplete="off"
               />
             </div>
@@ -277,14 +255,14 @@ export default function Register() {
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Creating account...' : 
-               location.state?.showInvitationBanner ? 'Create Account & Join Project' : 'Create Account'}
+              {isLoading ? 'Creating account...' :
+               location.state?.isInvitationFlow ? 'Sign up & Join Project' : 'Sign up'}
             </Button>
           </form>
           <div className="mt-6 text-center text-sm">
             <span className="text-muted-foreground">Already have an account? </span>
             <Link to="/login" className="text-primary hover:underline font-medium">
-              Sign in
+              Log in
             </Link>
           </div>
         </CardContent>

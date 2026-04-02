@@ -141,7 +141,7 @@ export default function ProjectCard({ project, onDelete, currentUserId }) {
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 text-gray-500">📋</div>
               <span className="text-sm text-gray-600">
-                {project.issues.length} issue{project.issues.length !== 1 ? 's' : ''}
+                {project.issues.length} Task{project.issues.length !== 1 ? 's' : ''} 
               </span>
             </div>
           </div>

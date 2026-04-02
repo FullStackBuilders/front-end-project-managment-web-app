@@ -6,6 +6,7 @@ import SendInviteModal from './SendInviteModal';
 import InviteStatusModal from './InviteStatusModal';
 import ResendConfirmationModal from './ResendConfirmationModal';
 import { emailInvitationApi } from '../services/emailInvitationApi';
+import { getAvatarColor } from '../utils/avatarColor';
 
 export default function ProjectDetailsCard({ project }) {
   const [showAllTags, setShowAllTags] = useState(false);
@@ -192,7 +193,7 @@ export default function ProjectDetailsCard({ project }) {
             {displayedMembers.map((member) => (
               <div key={member.id} className="flex items-center gap-3">
                 {/* Avatar */}
-                <div className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-medium">
+                <div className={`w-8 h-8 ${getAvatarColor(`${member.firstName ?? ''} ${member.lastName ?? ''}`)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
                   {member.firstName?.[0]}{member.lastName?.[0]}
                 </div>
                 

@@ -5,6 +5,8 @@ import Header from '../components/Header';
 import ProjectDetailsCard from '../components/ProjectDetailsCard';
 import ChatBox from '../components/ChatBox';
 import KanbanBoard from '../components/KanbanBoard';
+import IssueListView from '../components/IssueListView';
+import CalendarView from '../components/CalendarView';
 import { fetchProjectById } from '../store/projectSlice';
 import { fetchIssuesByProject, clearIssues } from '../store/issueSlice';
 import { fetchChatMessages } from '../store/chatSlice';
@@ -12,6 +14,7 @@ import { fetchChatMessages } from '../store/chatSlice';
 export default function ManageProject() {
   const { projectId } = useParams();
   const dispatch = useDispatch();
+  const [activeTab, setActiveTab] = useState('board');
   const { currentProject, loading: projectLoading, error: projectError } = useSelector(state => state.project);
   const { loading: issuesLoading, error: issuesError, currentProjectId } = useSelector(state => state.issues);
   const { loading: chatLoading } = useSelector(state => state.chat);
@@ -97,10 +100,13 @@ export default function ManageProject() {
           </div>
         </div>
 
-        {/* Issues Error Display - Only show if there's a real error loading issues, not drag-related errors */}
-        {issuesError && 
-         issuesError !== 'No issues found for this project' && 
-         !issuesError.includes('update issue status') && (
+        {/* Issues fetch error — only show for load-time failures, not mutation errors */}
+        {issuesError &&
+         issuesError !== 'No issues found for this project' &&
+         !issuesError.toLowerCase().includes('update issue status') &&
+         !issuesError.toLowerCase().includes('not authorized') &&
+         !issuesError.toLowerCase().includes('failed to update') &&
+         !issuesError.toLowerCase().includes('failed to delete') && (
           <div className="mb-4">
             <div className="bg-red-50 border border-red-200 rounded-md p-4">
               <div className="flex">
@@ -125,9 +131,26 @@ export default function ManageProject() {
           </div>
         )}
 
-        {/* Kanban Board Section */}
+        {/* Board / List / Calendar Tabs */}
         <div className="mt-8">
-          <KanbanBoard projectId={projectId} />
+          <div className="flex gap-1 mb-4 border-b border-gray-200">
+            {['board', 'list', 'calendar'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors cursor-pointer
+                  ${activeTab === tab
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'board' && <KanbanBoard projectId={projectId} />}
+          {activeTab === 'list' && <IssueListView projectId={projectId} />}
+          {activeTab === 'calendar' && <CalendarView />}
         </div>
       </div>
     </div>

@@ -20,7 +20,7 @@ export default function InviteStatusModal({ show, isSuccess, message, onClose })
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div 
         className={`bg-white rounded-lg shadow-xl p-8 mx-4 max-w-sm w-full text-center transform transition-all duration-300 ${
           visible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'

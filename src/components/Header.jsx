@@ -67,7 +67,7 @@ export default function Header() {
             )}
             <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2">
               <LogOut size={16} />
-              Logout
+              Log out
             </Button>
           </div>
         </div>

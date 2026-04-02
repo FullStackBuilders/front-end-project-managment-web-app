@@ -1,21 +1,22 @@
-// components/ProjectJoinSuccessModal.jsx
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, X } from 'lucide-react';
+import { AlertCircle, X } from 'lucide-react';
 
-export default function ProjectJoinSuccessModal({ 
-  isOpen, 
-  onClose, 
-  projectName 
+export default function ProjectJoinFailedModal({
+  isOpen,
+  onClose,
+  projectName,
+  action, // 'log in' | 'sign up'
+  buttonLabel = 'Close',
 }) {
   if (!isOpen) return null;
 
   const handleClose = () => {
+    sessionStorage.removeItem('invitationJoinFailed');
+    sessionStorage.removeItem('invitationFailedProjectName');
+    sessionStorage.removeItem('invitationFailedAction');
     onClose();
-    // Clear any invitation-related data from sessionStorage
-    sessionStorage.removeItem('invitationAccepted');
-    sessionStorage.removeItem('projectJoined');
   };
 
   return (
@@ -31,29 +32,30 @@ export default function ProjectJoinSuccessModal({
             </button>
           </div>
           <div className="flex justify-center mb-4">
-            <CheckCircle className="h-16 w-16 text-green-500" />
+            <AlertCircle className="h-16 w-16 text-amber-500" />
           </div>
-          <CardTitle className="text-2xl font-bold text-green-600">
-            Congratulations!
+          <CardTitle className="text-2xl font-bold text-amber-600">
+            Unable to Join Project
           </CardTitle>
           <CardDescription className="text-lg">
-            You have successfully joined the project
+            You could not be added to this project
           </CardDescription>
         </CardHeader>
         <CardContent className="text-center pb-6">
-          <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <p className="text-sm text-gray-600 mb-1">Project Name:</p>
-            <p className="font-semibold text-gray-900">{projectName}</p>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+            <p className="text-amber-800 text-sm">
+              You could not be added to{' '}
+              <span className="font-semibold">"{projectName}"</span>{' '}
+              because the email address to which the project invitation was sent does not
+              match the email you used to {action}.
+            </p>
           </div>
-          <p className="text-gray-600 mb-6">
-            You can now access this project from your dashboard and start collaborating with your team.
-          </p>
-          <Button 
-            onClick={handleClose} 
+          <Button
+            onClick={handleClose}
             className="w-full"
             size="lg"
           >
-            Go to Dashboard
+            {buttonLabel}
           </Button>
         </CardContent>
       </Card>

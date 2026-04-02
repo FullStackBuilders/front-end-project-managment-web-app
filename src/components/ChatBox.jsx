@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { MessageCircle, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { sendMessage, clearError } from '../store/chatSlice';
+import { getAvatarColor } from '../utils/avatarColor';
 
 export default function ChatBox({ projectId }) {
   const [message, setMessage] = useState('');
@@ -73,7 +74,7 @@ export default function ChatBox({ projectId }) {
           messages.map((msg) => (
             <div key={msg.id} className="flex gap-3">
               {/* Avatar */}
-              <div className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
+              <div className={`w-8 h-8 ${getAvatarColor(`${msg.sender?.firstName ?? ''} ${msg.sender?.lastName ?? ''}`)} text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0`}>
                 {msg.sender?.firstName?.[0]}{msg.sender?.lastName?.[0]}
               </div>
               

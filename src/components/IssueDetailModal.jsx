@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { format } from "date-fns";
 import { X, Calendar, Flag, MessageSquare, Send } from "lucide-react";
+import { formatSmartTimestamp } from "../utils/dateUtils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../context/AuthContext";
 import { issueApi } from "../services/issueApi";
+import { getAvatarColor } from "../utils/avatarColor";
 import {
   fetchCommentsByIssue,
   addComment,
@@ -90,7 +92,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
   const formatDate = (dateString) => {
     if (!dateString) return "Not set";
     try {
-      return format(new Date(dateString), "MMM dd, yyyy");
+      return format(new Date(dateString + "T00:00:00"), "MMM dd, yyyy");
     } catch {
       return "Invalid date";
     }
@@ -104,6 +106,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
       return "Invalid date";
     }
   };
+
 
   const canComment = () => {
     if (!user || !issueDetail) return false;
@@ -131,8 +134,8 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
   if (!showModal) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
           <h2 className="text-xl font-semibold text-gray-900">Issue Details</h2>
@@ -145,7 +148,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
+        <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center p-8 text-gray-500">
               Loading issue details...
@@ -163,22 +166,33 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                     <h3 className="text-lg font-medium text-gray-900 mb-2">
                       #{issueDetail.id} {issueDetail.title}
                     </h3>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium border ${
-                          PRIORITY_COLORS[issueDetail.priority]
-                        }`}
-                      >
-                        <Flag className="w-3 h-3 inline mr-1" />
-                        {issueDetail.priority}
-                      </span>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium border ${
-                          STATUS_COLORS[issueDetail.status]
-                        }`}
-                      >
-                        {issueDetail.status.replace("_", " ")}
-                      </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Priority Level
+                        </label>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${
+                            PRIORITY_COLORS[issueDetail.priority]
+                          }`}
+                        >
+                          <Flag className="w-3 h-3 mr-1" />
+                          {issueDetail.priority}
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Status
+                        </label>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${
+                            STATUS_COLORS[issueDetail.status]
+                          }`}
+                        >
+                          {issueDetail.status.replace("_", " ")}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -204,7 +218,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                       Created By
                     </label>
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                      <div className={`w-8 h-8 ${getAvatarColor(issueDetail.createdByName)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
                         {getUserInitials(issueDetail.createdByName)}
                       </div>
                       <span className="text-gray-900">
@@ -220,7 +234,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                     </label>
                     {issueDetail.assigneeName ? (
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                        <div className={`w-8 h-8 ${getAvatarColor(issueDetail.assigneeName)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
                           {getUserInitials(issueDetail.assigneeName)}
                         </div>
                         <span className="text-gray-900">
@@ -238,7 +252,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                       Project Owner
                     </label>
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-purple-500 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                      <div className={`w-8 h-8 ${getAvatarColor(issueDetail.projectOwnerName)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
                         {getUserInitials(issueDetail.projectOwnerName)}
                       </div>
                       <span className="text-gray-900">
@@ -283,6 +297,31 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                 </div>
               </div>
 
+              {/* Last Edited metadata — only shown after a content edit has occurred */}
+              {issueDetail.lastEditedByName && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Edited By
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-8 h-8 ${getAvatarColor(issueDetail.lastEditedByName)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
+                        {getUserInitials(issueDetail.lastEditedByName)}
+                      </div>
+                      <span className="text-gray-900">{issueDetail.lastEditedByName}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Edited At
+                    </label>
+                    <span className="text-gray-900">
+                      {formatSmartTimestamp(issueDetail.lastEditedAt)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Comments */}
               <div className="border-t pt-6">
                 <div className="flex items-center gap-2 mb-4">
@@ -306,7 +345,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center text-xs font-medium">
+                            <div className={`w-6 h-6 ${getAvatarColor(comment.userName)} text-white rounded-full flex items-center justify-center text-xs font-medium`}>
                               {getUserInitials(comment.userName)}
                             </div>
                             <span className="text-sm font-medium text-gray-900">

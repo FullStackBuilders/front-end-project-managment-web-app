@@ -2,14 +2,19 @@ import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { Button } from '@/components/ui/button';
 import { X, AlertCircle } from 'lucide-react';
-import { createIssue, updateIssue } from '../store/issueSlice';
+import { createIssue, updateIssue, addAssignee } from '../store/issueSlice';
 
-export default function CreateIssueModal({ showModal, setShowModal, projectId, editingIssue = null }) {
+function memberFullName(member) {
+  return `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.email || `User #${member.id}`;
+}
+
+export default function CreateIssueModal({ showModal, setShowModal, projectId, editingIssue = null, projectMembers = [] }) {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     priority: 'MEDIUM',
-    dueDate: ''
+    dueDate: '',
+    assigneeId: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -17,12 +22,15 @@ export default function CreateIssueModal({ showModal, setShowModal, projectId, e
 
   // Populate form when editing
   useEffect(() => {
+  const today = new Date().toLocaleDateString('en-CA');
+
     if (editingIssue) {
       setFormData({
         title: editingIssue.title || '',
         description: editingIssue.description || '',
         priority: editingIssue.priority || 'MEDIUM',
-        dueDate: editingIssue.dueDate ? editingIssue.dueDate.split('T')[0] : ''
+        dueDate: editingIssue.dueDate ? editingIssue.dueDate.split('T')[0] : '',
+        assigneeId: '',
       });
     } else {
       // Reset form for create mode
@@ -30,7 +38,8 @@ export default function CreateIssueModal({ showModal, setShowModal, projectId, e
         title: '',
         description: '',
         priority: 'MEDIUM',
-        dueDate: ''
+        dueDate: today,
+        assigneeId: '',
       });
     }
   }, [editingIssue]);
@@ -70,11 +79,18 @@ export default function CreateIssueModal({ showModal, setShowModal, projectId, e
           issueData
         })).unwrap();
       } else {
-        // Create new issue
-        await dispatch(createIssue({
+        // Create new issue, then assign if a member was selected
+        const created = await dispatch(createIssue({
           projectId,
           issueData
         })).unwrap();
+
+        if (formData.assigneeId && created?.id) {
+          await dispatch(addAssignee({
+            issueId: created.id,
+            userId: formData.assigneeId,
+          })).unwrap();
+        }
       }
 
       setShowModal(false);
@@ -90,7 +106,7 @@ export default function CreateIssueModal({ showModal, setShowModal, projectId, e
   const isEditMode = !!editingIssue;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -162,11 +178,34 @@ export default function CreateIssueModal({ showModal, setShowModal, projectId, e
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             >
-              <option value="LOW">🟢 Low</option>
-              <option value="MEDIUM">🟡 Medium</option>
-              <option value="HIGH">🔴 High</option>
+              <option value="LOW"> Low</option>
+              <option value="MEDIUM"> Medium</option>
+              <option value="HIGH"> High</option>
             </select>
           </div>
+
+          {/* Assignee — shown only in create mode when project members are available */}
+          {!editingIssue && projectMembers.length > 0 && (
+            <div className="mb-4">
+              <label htmlFor="assigneeId" className="block text-sm font-medium text-gray-700 mb-1">
+                Assignee
+              </label>
+              <select
+                id="assigneeId"
+                name="assigneeId"
+                value={formData.assigneeId}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                <option value="">— None —</option>
+                {projectMembers.map((member) => (
+                  <option key={member.id} value={String(member.id)}>
+                    {memberFullName(member)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Due Date */}
           <div className="mb-6">
@@ -180,7 +219,7 @@ export default function CreateIssueModal({ showModal, setShowModal, projectId, e
               value={formData.dueDate}
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              min={new Date().toISOString().split('T')[0]}
+              min={new Date().toLocaleDateString('en-CA')}
             />
           </div>
 

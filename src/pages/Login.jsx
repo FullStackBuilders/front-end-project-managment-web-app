@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,13 +18,6 @@ export default function Login() {
   
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    if (location.state?.email) {
-      setFormData(prev => ({ ...prev, email: location.state.email }));
-    }
-  }, [location.state]);
 
   const handleChange = (e) => {
     setFormData({
@@ -41,13 +34,7 @@ export default function Login() {
 
     try {
       await login(formData);
-      const pendingInvitation = sessionStorage.getItem('pendingInvitation');
-
-      if (pendingInvitation === 'true') {
-        navigate('/dashboard');
-      } else {
-        navigate('/dashboard');
-      }
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -69,7 +56,7 @@ export default function Login() {
             Welcome back
           </CardTitle>
           <CardDescription className="text-center">
-            Sign in to your account to continue
+            Log in to your account to continue
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -117,7 +104,7 @@ export default function Login() {
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? 'Logging in...' : 'Log in'}
             </Button>
           </form>
           <div className="mt-6 text-center text-sm">

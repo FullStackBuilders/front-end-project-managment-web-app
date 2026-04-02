@@ -149,35 +149,23 @@ const issueSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Update issue
-      .addCase(updateIssue.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+      // Update issue — no global loading/error; components handle via .unwrap()
       .addCase(updateIssue.fulfilled, (state, action) => {
-        state.loading = false;
         const index = state.issues.findIndex(issue => issue.id === action.payload.id);
         if (index !== -1) {
           state.issues[index] = action.payload;
         }
       })
-      .addCase(updateIssue.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
+      .addCase(updateIssue.rejected, (_state, _action) => {
+        // Intentionally not stored in global state — callers use .unwrap() to handle locally
       })
-      
-      // Delete issue
-      .addCase(deleteIssue.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+
+      // Delete issue — no global loading/error; components handle via .unwrap()
       .addCase(deleteIssue.fulfilled, (state, action) => {
-        state.loading = false;
         state.issues = state.issues.filter(issue => issue.id !== action.payload);
       })
-      .addCase(deleteIssue.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
+      .addCase(deleteIssue.rejected, (_state, _action) => {
+        // Intentionally not stored in global state — callers use .unwrap() to handle locally
       })
       
       // Update status

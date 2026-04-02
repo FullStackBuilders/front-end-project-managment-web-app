@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Users, Calendar, Tag, User, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import invitationApi from '../services/invitationApi';
+import ProjectJoinFailedModal from '../components/ProjectJoinFailedModal';
 
 export default function AcceptInvitation() {
   const [searchParams] = useSearchParams();
@@ -15,6 +16,7 @@ export default function AcceptInvitation() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [accepting, setAccepting] = useState(false);
+  const [showJoinFailedModal, setShowJoinFailedModal] = useState(false);
 
   const token = searchParams.get('token');
 
@@ -67,40 +69,24 @@ export default function AcceptInvitation() {
         });
       }
     } catch (err) {
-      setError(err.message || 'Failed to accept invitation');
+      setShowJoinFailedModal(true);
     } finally {
       setAccepting(false);
     }
   };
 
   const handleLoginRedirect = () => {
-    // Store invitation context for after login
     sessionStorage.setItem('pendingInvitation', 'true');
     sessionStorage.setItem('invitationToken', token);
     sessionStorage.setItem('invitationProjectName', invitationData.projectName);
-    
-    navigate('/login', { 
-      state: { 
-        showInvitationBanner: true,
-        projectName: invitationData.projectName,
-        email: invitationData.email
-      } 
-    });
+    navigate('/login');
   };
 
   const handleRegisterRedirect = () => {
-    // FIXED: Store invitation context for after registration
     sessionStorage.setItem('pendingInvitation', 'true');
     sessionStorage.setItem('invitationToken', token);
     sessionStorage.setItem('invitationProjectName', invitationData.projectName);
-    
-    navigate('/register', { 
-      state: { 
-        invitationEmail: invitationData?.email || '',
-        projectName: invitationData.projectName,
-        showInvitationBanner: true 
-      } 
-    });
+    navigate('/register', { state: { isInvitationFlow: true } });
   };
 
   if (loading || isLoading) {
@@ -122,7 +108,7 @@ export default function AcceptInvitation() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
-            <CardTitle className="text-red-600">Invitation Error</CardTitle>
+            <CardTitle className="text-red-600">Unable to Load Invitation</CardTitle>
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-gray-600 mb-6">{error}</p>
@@ -216,36 +202,33 @@ export default function AcceptInvitation() {
                   // User not logged in - show login/register options
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
                     <h4 className="font-semibold text-yellow-800 mb-2">
-                      Please log in or create an account to join this project
+                      Log in or sign up to join this project
                     </h4>
                     <p className="text-yellow-700 mb-4 text-sm">
-                      You need to be logged in to accept project invitations and collaborate with your team.
+                      Please log in or sign up using the same email address this invitation
+                      was sent to. If you use a different email, you won't be added to the
+                      project.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3">
-                      <Button 
+                      <Button
                         onClick={handleLoginRedirect}
                         variant="default"
                         className="flex-1"
                       >
-                        Login to Accept
+                        Log in
                       </Button>
-                      <Button 
+                      <Button
                         onClick={handleRegisterRedirect}
                         variant="outline"
                         className="flex-1"
                       >
-                        Create Account
+                        Sign up
                       </Button>
                     </div>
                   </div>
                 )}
               </div>
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-red-600 text-sm">{error}</p>
-                </div>
-                )}
             </div>
           </CardContent>
         </Card>
@@ -256,6 +239,14 @@ export default function AcceptInvitation() {
           <p>If you didn't expect this invitation, you can safely ignore it.</p>
         </div>
       </div>
+
+      <ProjectJoinFailedModal
+        isOpen={showJoinFailedModal}
+        onClose={() => { setShowJoinFailedModal(false); navigate('/dashboard'); }}
+        projectName={invitationData?.projectName || ''}
+        action="log in"
+        buttonLabel="Go to Dashboard"
+      />
     </div>
   );
 }

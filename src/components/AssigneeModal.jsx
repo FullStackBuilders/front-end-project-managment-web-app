@@ -3,6 +3,7 @@ import { useDispatch } from 'react-redux';
 import { Button } from '@/components/ui/button';
 import { X, User, Check } from 'lucide-react';
 import { addAssignee } from '../store/issueSlice';
+import { getAvatarColor } from '../utils/avatarColor';
 
 export default function AssigneeModal({ showModal, setShowModal, issue, projectMembers }) {
   const [selectedUserId, setSelectedUserId] = useState(issue.assignee?.id || null);
@@ -39,7 +40,7 @@ export default function AssigneeModal({ showModal, setShowModal, issue, projectM
   if (!showModal) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -94,7 +95,7 @@ export default function AssigneeModal({ showModal, setShowModal, issue, projectM
                       onClick={() => setSelectedUserId(member.id)}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-medium">
+                        <div className={`w-8 h-8 ${getAvatarColor(`${member.firstName ?? ''} ${member.lastName ?? ''}`)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
                           {member.firstName?.[0]}{member.lastName?.[0]}
                         </div>
                         

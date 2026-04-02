@@ -1,36 +1,38 @@
-import React, { useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { format } from 'date-fns';
-import { Calendar, Eye, UserPlus, Trash2, Edit, GripVertical } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '../context/AuthContext';
-import { deleteIssue } from '../store/issueSlice';
-import AssigneeModal from './AssigneeModal';
-import DeleteConfirmationModal from './DeleteConfirmationModal';
-import IssueDetailModal from './IssueDetailModal'; // Import the new modal
+import React, { useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { format } from "date-fns";
+import { Calendar, Eye, UserPlus, Trash2, Edit, Flag } from "lucide-react";
+import { formatSmartTimestamp } from "../utils/dateUtils";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "../context/AuthContext";
+import { deleteIssue } from "../store/issueSlice";
+import AssigneeModal from "./AssigneeModal";
+import { getAvatarColor } from "../utils/avatarColor";
+import DeleteConfirmationModal from "./DeleteConfirmationModal";
+import IssueDetailModal from "./IssueDetailModal"; // Import the new modal
 
 const PRIORITY_COLORS = {
-  HIGH: 'bg-red-100 text-red-800 border-red-200',
-  MEDIUM: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  LOW: 'bg-green-100 text-green-800 border-green-200'
+  HIGH: "bg-red-100 text-red-800 border-red-200",
+  MEDIUM: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  LOW: "bg-green-100 text-green-800 border-green-200",
 };
 
-const PRIORITY_ICONS = {
-  HIGH: '🔴',
-  MEDIUM: '🟡',
-  LOW: '🟢'
-};
+// const PRIORITY_ICONS = {
+//   HIGH: 'HIGH',
+//   MEDIUM: 'MEDIUM',
+//   LOW: 'LOW'
+// };
 
-export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, ...dragProps }) {
+export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
   const [showAssigneeModal, setShowAssigneeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false); // New state for detail modal
   const [isDeleting, setIsDeleting] = useState(false);
   const dispatch = useDispatch();
-  const { isCreator, canAssignIssue } = useAuth();
-  const { currentProject } = useSelector(state => state.project);
+  const { isCreator, isProjectOwner, canAssignIssue } = useAuth();
+  const { currentProject } = useSelector((state) => state.project);
 
-  const canEditOrDelete = isCreator(issue.createdById);
+  const canEditOrDelete = isCreator(issue.createdById) || isProjectOwner(issue.projectOwnerId);
   const canAssign = canAssignIssue(issue);
 
   const handleDeleteClick = (e) => {
@@ -46,7 +48,7 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
       await dispatch(deleteIssue(issue.id)).unwrap();
       setShowDeleteModal(false);
     } catch (error) {
-      console.error('Failed to delete issue:', error);
+      console.error("Failed to delete issue:", error);
     } finally {
       setIsDeleting(false);
     }
@@ -56,7 +58,7 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
     e.preventDefault();
     e.stopPropagation();
     e.nativeEvent.stopImmediatePropagation();
-    
+
     // Call the onEditIssue prop passed down from KanbanBoard
     if (onEditIssue) {
       onEditIssue(issue);
@@ -77,13 +79,24 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
     setShowAssigneeModal(true);
   };
 
+  const getUserInitials = (userName) => {
+    if (!userName) return "??";
+    return userName
+      .split(" ")
+      .map((part) => part[0] || "")
+      .join("")
+      .substring(0, 2)
+      .toUpperCase();
+  };
+
   const formatDate = (dateString) => {
     try {
-      return format(new Date(dateString), 'MMM dd');
+      return format(new Date(dateString + "T00:00:00"), "MMM dd");
     } catch {
-      return '';
+      return "";
     }
   };
+
 
   return (
     <>
@@ -95,13 +108,16 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
         <div className="p-4">
           {/* Header with Priority and ID */}
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-sm">{PRIORITY_ICONS[issue.priority]}</span>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium border ${PRIORITY_COLORS[issue.priority]}`}>
+            <span className="text-xs font-medium text-gray-500">
+              Priority Level:
+            </span>
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-medium border ${PRIORITY_COLORS[issue.priority]}`}
+            >
+              <Flag className="w-3 h-3 inline mr-1" />
               {issue.priority}
             </span>
-            <div className="ml-auto text-xs text-gray-500">
-              #{issue.id}
-            </div>
+            <div className="ml-auto text-xs text-gray-500">#{issue.id}</div>
           </div>
 
           {/* Title */}
@@ -118,14 +134,16 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
 
           {/* Assignee */}
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-medium text-gray-500">Assigned to:</span>
-            {issue.assignee ? (
+            <span className="text-xs font-medium text-gray-500">
+              Assigned to:
+            </span>
+            {issue.assigneeName ? (
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-medium">
-                  {issue.assignee?.firstName?.[0]}{issue.assignee?.lastName?.[0]}
+                <div className={`w-6 h-6 ${getAvatarColor(issue.assigneeName)} text-white rounded-full flex items-center justify-center text-xs font-medium`}>
+                  {getUserInitials(issue.assigneeName)}
                 </div>
                 <span className="text-xs text-gray-700">
-                  {issue.assignee.firstName} {issue.assignee.lastName}
+                  {issue.assigneeName}
                 </span>
               </div>
             ) : (
@@ -139,6 +157,13 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
               <Calendar className="w-3 h-3" />
               <span>Due {formatDate(issue.dueDate)}</span>
             </div>
+          )}
+
+          {/* Last edited info */}
+          {issue.lastEditedByName && (
+            <p className="text-xs text-gray-400 mb-2">
+              Edited by {issue.lastEditedByName} · {formatSmartTimestamp(issue.lastEditedAt)}
+            </p>
           )}
 
           {/* Actions */}
@@ -165,7 +190,7 @@ export default function IssueCard({ issue, projectId, onCardClick, onEditIssue, 
                 type="button"
               >
                 <UserPlus className="w-3 h-3 mr-1" />
-                Assign
+                {issue.assigneeName ? 'Change Assignee' : 'Assign'}
               </Button>
             )}
 
