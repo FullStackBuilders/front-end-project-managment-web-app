@@ -7,7 +7,7 @@ import ChatBox from '../components/ChatBox';
 import KanbanBoard from '../components/KanbanBoard';
 import IssueListView from '../components/IssueListView';
 import CalendarView from '../components/CalendarView';
-import IssueFilterButton from '../components/IssueFilterButton';
+import ProjectAnalytics from '../components/ProjectAnalytics';
 import { fetchProjectById } from '../store/projectSlice';
 import { fetchIssuesByProject, clearIssues } from '../store/issueSlice';
 import { fetchChatMessages } from '../store/chatSlice';
@@ -136,7 +136,7 @@ export default function ManageProject() {
         <div className="mt-8">
           <div className="flex items-center justify-between mb-4 border-b border-gray-200">
             <div className="flex gap-1">
-              {['board', 'list', 'calendar'].map(tab => (
+              {['board', 'list', 'calendar', 'analytics'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -149,14 +149,12 @@ export default function ManageProject() {
                 </button>
               ))}
             </div>
-            <div className="pb-1">
-              <IssueFilterButton view={activeTab} />
-            </div>
           </div>
 
-          {activeTab === 'board' && <KanbanBoard projectId={projectId} />}
-          {activeTab === 'list' && <IssueListView projectId={projectId} />}
-          {activeTab === 'calendar' && <CalendarView />}
+          {activeTab === 'board'     && <KanbanBoard projectId={projectId} />}
+          {activeTab === 'list'      && <IssueListView projectId={projectId} />}
+          {activeTab === 'calendar'  && <CalendarView />}
+          {activeTab === 'analytics' && <ProjectAnalytics />}
         </div>
       </div>
     </div>

@@ -10,11 +10,12 @@ import {
   updateIssueStatus,
   addAssignee,
   deleteIssue,
-  selectFilteredIssues,
+  selectListFilteredIssues,
 } from '../store/issueSlice';
 import CreateIssueModal from './CreateIssueModal';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 import ErrorModal from './ErrorModal';
+import IssueFilterButton from './IssueFilterButton';
 
 const COLUMN_DEFINITIONS = [
   { id: 'name',         label: 'Name',           defaultVisible: true  },
@@ -26,10 +27,11 @@ const COLUMN_DEFINITIONS = [
   { id: 'description',  label: 'Description',    defaultVisible: true  },
   { id: 'lastEditedBy', label: 'Last Edited By', defaultVisible: false },
   { id: 'lastEditedAt', label: 'Last Edited At', defaultVisible: false },
+  { id: 'assignedBy',   label: 'Assigned By',    defaultVisible: false },
 ];
 
 const SORTABLE_COLUMNS = new Set([
-  'name', 'priority', 'assignedTo', 'createdBy', 'dueDate', 'lastEditedBy', 'lastEditedAt',
+  'name', 'priority', 'assignedTo', 'createdBy', 'dueDate', 'lastEditedBy', 'lastEditedAt', 'assignedBy',
 ]);
 
 // Lower number = sorts first when ascending (High → Medium → Low)
@@ -51,6 +53,7 @@ const getSortValue = (issue, col) => {
     case 'lastEditedAt': return issue.lastEditedAt
                            ? new Date(issue.lastEditedAt).getTime()
                            : 0;         // never-edited sorts oldest
+    case 'assignedBy':   return (issue.assignedByName || '').toLowerCase();
     default: return '';
   }
 };
@@ -165,7 +168,7 @@ function memberFullName(member) {
 export default function IssueListView({ projectId }) {
   const dispatch = useDispatch();
   const { isCreator, isProjectOwner } = useAuth();
-  const issues = useSelector(selectFilteredIssues);
+  const issues = useSelector(selectListFilteredIssues);
   const { currentProject } = useSelector((state) => state.project);
 
   const [editingRowId, setEditingRowId] = useState(null);
@@ -181,11 +184,16 @@ export default function IssueListView({ projectId }) {
   const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
 
   const [visibleColumns, setVisibleColumns] = useState(() => {
+    const defaultColumns = Object.fromEntries(
+      COLUMN_DEFINITIONS.map((c) => [c.id, c.defaultVisible])
+    );
     try {
       const saved = localStorage.getItem(`teamboard_list_cols_${projectId}`);
       if (saved) return JSON.parse(saved);
-    } catch {}
-    return Object.fromEntries(COLUMN_DEFINITIONS.map((c) => [c.id, c.defaultVisible]));
+    } catch {
+      return defaultColumns;
+    }
+    return defaultColumns;
   });
   const [colsOpen, setColsOpen] = useState(false);
 
@@ -350,31 +358,36 @@ export default function IssueListView({ projectId }) {
     <div ref={containerRef} onClick={() => setExpandedCell(null)} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       {/* Header row */}
       <div className="flex justify-between items-center mb-4">
-        {/* Column visibility toggle */}
-        <div className="relative" ref={colsRef}>
-          <button
-            onClick={() => setColsOpen((o) => !o)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-md text-gray-600 bg-white hover:bg-gray-50 transition-colors"
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-            Columns
-          </button>
-          {colsOpen && (
-            <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Toggle columns</p>
-              {COLUMN_DEFINITIONS.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 py-1 cursor-pointer text-sm text-gray-700 hover:text-gray-900">
-                  <input
-                    type="checkbox"
-                    checked={col(c.id)}
-                    onChange={() => setVisibleColumns((v) => ({ ...v, [c.id]: !v[c.id] }))}
-                    className="rounded"
-                  />
-                  {c.label}
-                </label>
-              ))}
-            </div>
-          )}
+        <div className="flex items-center gap-2">
+          {/* Column visibility toggle */}
+          <div className="relative" ref={colsRef}>
+            <button
+              onClick={() => setColsOpen((o) => !o)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-md text-gray-600 bg-white hover:bg-gray-50 transition-colors"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              Columns
+            </button>
+            {colsOpen && (
+              <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Toggle columns</p>
+                {COLUMN_DEFINITIONS.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 py-1 cursor-pointer text-sm text-gray-700 hover:text-gray-900">
+                    <input
+                      type="checkbox"
+                      checked={col(c.id)}
+                      onChange={() => setVisibleColumns((v) => ({ ...v, [c.id]: !v[c.id] }))}
+                      className="rounded"
+                    />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Filter button — sits immediately to the right of the Columns button */}
+          <IssueFilterButton view="list" align="start" />
         </div>
 
         <Button onClick={() => setShowCreateModal(true)}>
@@ -452,6 +465,14 @@ export default function IssueListView({ projectId }) {
                     <span className="flex items-center gap-1">Last Edited At <SortIcon col="lastEditedAt" sortCol={sortCol} sortDir={sortDir} /></span>
                   </th>
                 )}
+                {col('assignedBy') && (
+                  <th
+                    onClick={() => toggleSort('assignedBy')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Assigned By <SortIcon col="assignedBy" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
                 {showActionsColumn && (
                   <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Actions</th>
                 )}
@@ -488,7 +509,7 @@ export default function IssueListView({ projectId }) {
                             onChange={(e) =>
                               setEditingValues((v) => ({ ...v, title: e.target.value }))
                             }
-                            className="w-40 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                            className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary w-40"
                           />
                         ) : (
                           <TruncatedCell
@@ -661,6 +682,19 @@ export default function IssueListView({ projectId }) {
                     {col('lastEditedAt') && (
                       <td className="px-3 py-3 whitespace-nowrap text-gray-500 text-xs">
                         {formatSmartTimestamp(issue.lastEditedAt) || '—'}
+                      </td>
+                    )}
+
+                    {/* Assigned By */}
+                    {col('assignedBy') && (
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <TruncatedCell
+                          value={issue.assignedByName || null}
+                          issueId={issue.id}
+                          field="assignedByName"
+                          expandedCell={expandedCell}
+                          setExpandedCell={setExpandedCell}
+                        />
                       </td>
                     )}
 

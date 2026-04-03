@@ -1,4 +1,5 @@
 import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
+import { isToday, isThisWeek, isThisMonth, parseISO } from 'date-fns';
 import { INITIAL_FILTERS, applyFilters, countActiveFilters } from '../utils/issueFilters';
 import AuthService from '../services/AuthService';
 import { issueApi } from '../services/issueApi';
@@ -81,6 +82,12 @@ export const addAssignee = createAsyncThunk(
   }
 );
 
+const makeInitialFiltersByView = () => ({
+  board:    { ...INITIAL_FILTERS },
+  list:     { ...INITIAL_FILTERS },
+  calendar: { ...INITIAL_FILTERS },
+});
+
 const issueSlice = createSlice({
   name: 'issues',
   initialState: {
@@ -88,14 +95,14 @@ const issueSlice = createSlice({
     loading: false,
     error: null,
     currentProjectId: null,
-    activeFilters: { ...INITIAL_FILTERS },
+    filtersByView: makeInitialFiltersByView(),
   },
   reducers: {
     clearIssues: (state) => {
       state.issues = [];
       state.error = null;
       state.currentProjectId = null;
-      state.activeFilters = { ...INITIAL_FILTERS };
+      state.filtersByView = makeInitialFiltersByView();
     },
     clearError: (state) => {
       state.error = null;
@@ -116,13 +123,14 @@ const issueSlice = createSlice({
         issue.status = originalStatus;
       }
     },
-    // Replace active filters entirely (called when user clicks Apply)
+    // Apply filters for a specific view — payload: { view, filters }
     setFilters: (state, action) => {
-      state.activeFilters = action.payload;
+      const { view, filters } = action.payload;
+      state.filtersByView[view] = filters;
     },
-    // Reset all active filters to defaults
-    clearFilters: (state) => {
-      state.activeFilters = { ...INITIAL_FILTERS };
+    // Reset filters for a specific view — payload: { view }
+    clearFilters: (state, action) => {
+      state.filtersByView[action.payload.view] = { ...INITIAL_FILTERS };
     },
   },
   extraReducers: (builder) => {
@@ -218,11 +226,84 @@ export default issueSlice.reducer;
 
 // ── Selectors ────────────────────────────────────────────────────────────────
 
-export const selectFilteredIssues = createSelector(
-  (state) => state.issues.issues,
-  (state) => state.issues.activeFilters,
-  (issues, filters) => applyFilters(issues, filters, AuthService.getCurrentUserId())
+// Factory — builds a memoised selector for one view.
+// Selectors are created outside components so they are not recreated on every render.
+const makeSelectFilteredIssues = (view) =>
+  createSelector(
+    (state) => state.issues.issues,
+    (state) => state.issues.filtersByView[view],
+    (issues, filters) => applyFilters(issues, filters, AuthService.getCurrentUserId())
+  );
+
+export const selectBoardFilteredIssues    = makeSelectFilteredIssues('board');
+export const selectListFilteredIssues     = makeSelectFilteredIssues('list');
+export const selectCalendarFilteredIssues = makeSelectFilteredIssues('calendar');
+
+// ── Analytics Selectors ───────────────────────────────────────────────────────
+
+const selectAllIssues = (state) => state.issues.issues;
+
+// Summary counts used by the Analytics tab summary cards.
+export const selectAnalyticsSummary = createSelector(
+  [selectAllIssues],
+  (issues) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const total      = issues.length;
+    const completed  = issues.filter((i) => i.status === 'DONE').length;
+    const inProgress = issues.filter((i) => i.status === 'IN_PROGRESS').length;
+    const overdue    = issues.filter(
+      (i) => i.dueDate && new Date(i.dueDate) < today && i.status !== 'DONE'
+    ).length;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return { total, completed, inProgress, overdue, completionRate };
+  }
 );
 
-export const selectActiveFilterCount = (state) =>
-  countActiveFilters(state.issues.activeFilters);
+// Data array for the status donut chart.
+export const selectStatusDistribution = createSelector(
+  [selectAllIssues],
+  (issues) => {
+    const todo       = issues.filter((i) => i.status === 'TO_DO').length;
+    const inProgress = issues.filter((i) => i.status === 'IN_PROGRESS').length;
+    const done       = issues.filter((i) => i.status === 'DONE').length;
+
+    return [
+      { name: 'To Do',       value: todo,       color: '#94a3b8' },
+      { name: 'In Progress', value: inProgress,  color: '#3b82f6' },
+      { name: 'Done',        value: done,        color: '#22c55e' },
+    ];
+  }
+);
+
+// Data array for the priority bar chart.
+export const selectPriorityDistribution = createSelector(
+  [selectAllIssues],
+  (issues) => {
+    const high   = issues.filter((i) => i.priority === 'HIGH').length;
+    const medium = issues.filter((i) => i.priority === 'MEDIUM').length;
+    const low    = issues.filter((i) => i.priority === 'LOW').length;
+
+    return [
+      { name: 'High',   value: high,   color: '#ef4444' },
+      { name: 'Medium', value: medium, color: '#f59e0b' },
+      { name: 'Low',    value: low,    color: '#22c55e' },
+    ];
+  }
+);
+
+// Counts for the optional due-date cards (excludes completed tasks).
+export const selectDueDateSummary = createSelector(
+  [selectAllIssues],
+  (issues) => {
+    const open  = issues.filter((i) => i.status !== 'DONE' && i.dueDate);
+    const parse = (d) => parseISO(String(d));
+    return {
+      dueToday:     open.filter((i) => isToday(parse(i.dueDate))).length,
+      dueThisWeek:  open.filter((i) => isThisWeek(parse(i.dueDate), { weekStartsOn: 1 })).length,
+      dueThisMonth: open.filter((i) => isThisMonth(parse(i.dueDate))).length,
+    };
+  }
+);

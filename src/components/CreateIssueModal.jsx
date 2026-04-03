@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { Button } from '@/components/ui/button';
 import { X, AlertCircle } from 'lucide-react';
-import { createIssue, updateIssue, addAssignee } from '../store/issueSlice';
+import { createIssue, updateIssue } from '../store/issueSlice';
 
 function memberFullName(member) {
   return `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.email || `User #${member.id}`;
@@ -66,31 +66,27 @@ export default function CreateIssueModal({ showModal, setShowModal, projectId, e
 
     try {
       const issueData = {
-        title: formData.title.trim(),
+        title:       formData.title.trim(),
         description: formData.description.trim(),
-        priority: formData.priority,
-        dueDate: formData.dueDate || null
+        priority:    formData.priority,
+        dueDate:     formData.dueDate || null,
+        // Pass the initial assignee to the backend so it is set atomically during creation
+        // without touching the lastEditedBy/lastEditedAt audit trail.
+        assigneeId:  formData.assigneeId ? Number(formData.assigneeId) : null,
       };
 
       if (editingIssue) {
-        // Update existing issue
+        // Update existing issue (assigneeId is not sent for edits — handled separately)
         await dispatch(updateIssue({
           issueId: editingIssue.id,
           issueData
         })).unwrap();
       } else {
-        // Create new issue, then assign if a member was selected
-        const created = await dispatch(createIssue({
+        // Create new issue — assignee is folded into the create request
+        await dispatch(createIssue({
           projectId,
           issueData
         })).unwrap();
-
-        if (formData.assigneeId && created?.id) {
-          await dispatch(addAssignee({
-            issueId: created.id,
-            userId: formData.assigneeId,
-          })).unwrap();
-        }
       }
 
       setShowModal(false);

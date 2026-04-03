@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { selectFilteredIssues } from '../store/issueSlice';
+import { selectCalendarFilteredIssues } from '../store/issueSlice';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isBefore, isToday } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, Flag } from 'lucide-react';
 import IssueDetailModal from './IssueDetailModal';
+import IssueFilterButton from './IssueFilterButton';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -102,14 +103,14 @@ function TaskChip({ task, onClick }) {
 
 // ── Main CalendarView ─────────────────────────────────────────────────────────
 export default function CalendarView() {
-  const issues = useSelector(selectFilteredIssues);
+  const issues = useSelector(selectCalendarFilteredIssues);
 
   const [displayDate, setDisplayDate] = useState(new Date());
   const [dayDetailTasks, setDayDetailTasks] = useState(null);  // array | null
   const [dayDetailLabel, setDayDetailLabel] = useState('');
   const [detailIssueId, setDetailIssueId] = useState(null);
 
-  // Group by YYYY-MM-DD — filtering is now handled by selectFilteredIssues
+  // Group by YYYY-MM-DD — filtering is handled by selectCalendarFilteredIssues
   const tasksByDate = useMemo(() => {
     const map = {};
     issues.forEach((issue) => {
@@ -169,14 +170,19 @@ export default function CalendarView() {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 mb-4 text-xs text-gray-500">
-        <span className="font-medium text-gray-700">Priority:</span>
-        {Object.entries(CHIP_STYLES).map(([priority, cls]) => (
-          <span key={priority} className={`inline-flex items-center px-2 py-0.5 rounded-full border ${cls}`}>
-            <Flag className="w-3 h-3 mr-1" />
-            {priority}
-          </span>
-        ))}
+      <div className="mb-4">
+        <div className="flex justify-end mb-2">
+          <IssueFilterButton view="calendar" />
+        </div>
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          <span className="font-medium text-gray-700">Priority:</span>
+          {Object.entries(CHIP_STYLES).map(([priority, cls]) => (
+            <span key={priority} className={`inline-flex items-center px-2 py-0.5 rounded-full border ${cls}`}>
+              <Flag className="w-3 h-3 mr-1" />
+              {priority}
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* Day-of-week header row */}

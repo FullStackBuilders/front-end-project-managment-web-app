@@ -10,7 +10,6 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
@@ -24,7 +23,8 @@ import { Plus, GripVertical } from 'lucide-react';
 import IssueCard from './IssueCard';
 import CreateIssueModal from './CreateIssueModal';
 import ErrorModal from './ErrorModal';
-import { updateIssueStatus, moveIssue, rollbackIssueMove, clearError, selectFilteredIssues } from '../store/issueSlice';
+import IssueFilterButton from './IssueFilterButton';
+import { updateIssueStatus, moveIssue, rollbackIssueMove, selectBoardFilteredIssues } from '../store/issueSlice';
 import AuthService from '../services/AuthService';
 
 const COLUMNS = [
@@ -159,8 +159,8 @@ export default function KanbanBoard({ projectId }) {
   const [dragError, setDragError] = useState(null);
   const dispatch = useDispatch();
 
-  const { loading, error } = useSelector(state => state.issues);
-  const issues = useSelector(selectFilteredIssues);
+  const { loading } = useSelector(state => state.issues);
+  const issues = useSelector(selectBoardFilteredIssues);
   const { currentProject } = useSelector(state => state.project);
 
   const allMembers = useMemo(() => {
@@ -316,7 +316,7 @@ export default function KanbanBoard({ projectId }) {
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Tasks Board</h2>
+        <IssueFilterButton view="board" align="start" />
         <div className="text-sm text-gray-500">
           Total Task{issues.length !== 1 ? 's' : ''}:  {issues.length}
         </div>

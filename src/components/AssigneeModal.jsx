@@ -140,7 +140,7 @@ export default function AssigneeModal({ showModal, setShowModal, issue, projectM
                     Assigning...
                   </>
                 ) : (
-                  'Assign User'
+                  'Assign'
                 )}
               </Button>
             </div>

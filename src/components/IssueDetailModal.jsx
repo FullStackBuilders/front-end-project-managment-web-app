@@ -246,6 +246,25 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                     )}
                   </div>
 
+                  {/* Assigned By */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Assigned By
+                    </label>
+                    {issueDetail.assignedByName ? (
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 ${getAvatarColor(issueDetail.assignedByName)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
+                          {getUserInitials(issueDetail.assignedByName)}
+                        </div>
+                        <span className="text-gray-900">
+                          {issueDetail.assignedByName}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 italic">—</span>
+                    )}
+                  </div>
+
                   {/* Project Owner */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

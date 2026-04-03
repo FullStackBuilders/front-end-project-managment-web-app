@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { SlidersHorizontal } from 'lucide-react';
-import { setFilters, clearFilters, selectActiveFilterCount } from '../store/issueSlice';
-import { INITIAL_FILTERS } from '../utils/issueFilters';
+import { Filter } from 'lucide-react';
+import { setFilters, clearFilters } from '../store/issueSlice';
+import { INITIAL_FILTERS, countActiveFilters } from '../utils/issueFilters';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -59,10 +59,12 @@ function PillButton({ active, onClick, children }) {
  *
  * @param {'board'|'list'|'calendar'} view - controls which filter sections appear
  */
-export default function IssueFilterButton({ view }) {
+export default function IssueFilterButton({ view, align = 'end' }) {
   const dispatch = useDispatch();
-  const activeFilterCount = useSelector(selectActiveFilterCount);
-  const reduxFilters = useSelector((state) => state.issues.activeFilters);
+  const activeFilterCount = useSelector((state) =>
+    countActiveFilters(state.issues.filtersByView[view])
+  );
+  const reduxFilters = useSelector((state) => state.issues.filtersByView[view]);
 
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState({ ...INITIAL_FILTERS });
@@ -156,12 +158,12 @@ export default function IssueFilterButton({ view }) {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   const handleApply = () => {
-    dispatch(setFilters(pending));
+    dispatch(setFilters({ view, filters: pending }));
     setOpen(false);
   };
 
   const handleClearAll = () => {
-    dispatch(clearFilters());
+    dispatch(clearFilters({ view }));
     setPending({ ...INITIAL_FILTERS });
     setOpen(false);
   };
@@ -180,7 +182,7 @@ export default function IssueFilterButton({ view }) {
             : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
           }`}
       >
-        <SlidersHorizontal className="w-4 h-4" />
+        <Filter className="w-4 h-4" />
         Filter
         {activeFilterCount > 0 && (
           <span className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary text-white text-[10px] font-bold leading-none">
@@ -191,9 +193,11 @@ export default function IssueFilterButton({ view }) {
 
       {/* Popup panel */}
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-gray-200 rounded-lg shadow-lg w-72">
+        <div
+          className={`absolute top-full mt-1 z-30 bg-white border border-gray-200 rounded-lg shadow-lg w-80 max-w-[calc(100vw-1rem)] ${align === 'start' ? 'left-0' : 'right-0'}`}
+        >
           {/* Panel header */}
-          <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-100">
+          <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100">
             <span className="text-sm font-semibold text-gray-800">Filters</span>
             <button
               type="button"
@@ -204,7 +208,7 @@ export default function IssueFilterButton({ view }) {
             </button>
           </div>
 
-          <div className="px-4 py-3 space-y-4">
+          <div className="px-5 py-4 space-y-5">
 
             {/* ── Assigned to Me (Board + List only) ─────────────────────── */}
             {showAssignedToMe && (
@@ -239,7 +243,7 @@ export default function IssueFilterButton({ view }) {
             <div>
               <SectionLabel>Due Date</SectionLabel>
               {/* Presets — mutually exclusive */}
-              <div className="flex flex-wrap gap-2 mb-2">
+              <div className="flex flex-wrap gap-2 mb-3">
                 {DUE_DATE_PRESETS.map(({ value, label }) => (
                   <PillButton
                     key={value}
@@ -251,12 +255,12 @@ export default function IssueFilterButton({ view }) {
                 ))}
               </div>
               {/* Custom date range */}
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-3">
                 <input
                   type="date"
                   value={pending.dueDatePreset === 'CUSTOM' ? (pending.dueDateFrom ?? '') : ''}
                   onChange={handleDateFromChange}
-                  className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                  className="min-w-0 flex-1 text-xs border border-gray-300 rounded-md px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                   placeholder="Start"
                 />
                 <span className="text-xs text-gray-400 shrink-0">to</span>
@@ -265,7 +269,7 @@ export default function IssueFilterButton({ view }) {
                   value={pending.dueDatePreset === 'CUSTOM' ? (pending.dueDateTo ?? '') : ''}
                   onChange={handleDateToChange}
                   min={pending.dueDatePreset === 'CUSTOM' ? (pending.dueDateFrom ?? '') : ''}
-                  className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                  className="min-w-0 flex-1 text-xs border border-gray-300 rounded-md px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                   placeholder="End"
                 />
               </div>

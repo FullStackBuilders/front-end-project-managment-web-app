@@ -1,9 +1,9 @@
 const CARDS = [
-  { key: 'assignedTasks', label: 'Assigned Tasks', border: 'border-l-blue-500', text: 'text-blue-600' },
-  { key: 'overdueTasks', label: 'Overdue Tasks', border: 'border-l-red-500', text: 'text-red-600' },
-  { key: 'dueTodayTasks', label: 'Tasks Due Today', border: 'border-l-yellow-500', text: 'text-yellow-600' },
-  { key: 'highPriorityTasks', label: 'High Priority Tasks', border: 'border-l-purple-500', text: 'text-purple-600' },
-  { key: 'completedTasks', label: 'Completed Tasks', border: 'border-l-green-500', text: 'text-green-600' },
+  { key: 'assignedTasks', label: 'Assigned', border: 'border-l-blue-500', text: 'text-blue-600' },
+  { key: 'overdueTasks', label: 'Overdue', border: 'border-l-red-500', text: 'text-red-600' },
+  { key: 'dueTodayTasks', label: 'Due Today', border: 'border-l-yellow-500', text: 'text-yellow-600' },
+  { key: 'highPriorityTasks', label: 'High Priority', border: 'border-l-red-500', text: 'text-red-600' },
+  { key: 'completedTasks', label: 'Completed', border: 'border-l-green-500', text: 'text-green-600' },
 ];
 
 export default function IssueCountCards({ counts, loading }) {
