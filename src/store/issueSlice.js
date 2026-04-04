@@ -243,6 +243,9 @@ export const selectCalendarFilteredIssues = makeSelectFilteredIssues('calendar')
 
 const selectAllIssues = (state) => state.issues.issues;
 
+// Exported for components that need raw issue data alongside local state (e.g. KanbanMetrics)
+export const selectAllIssuesRaw = selectAllIssues;
+
 // Summary counts used by the Analytics tab summary cards.
 export const selectAnalyticsSummary = createSelector(
   [selectAllIssues],

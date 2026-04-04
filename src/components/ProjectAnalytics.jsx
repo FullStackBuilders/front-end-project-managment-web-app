@@ -11,6 +11,7 @@ import {
   selectDueDateSummary,
 } from '../store/issueSlice';
 import { BarChart2, Settings } from 'lucide-react';
+import KanbanMetrics from './KanbanMetrics';
 
 // ── Core card configuration (always visible) ─────────────────────────────────
 
@@ -333,6 +334,11 @@ export default function ProjectAnalytics() {
           </div>
         </div>
       )}
+
+      {/* ── Kanban Metrics section ─────────────────────────────────────────── */}
+      <div className="border-t border-gray-200 pt-6">
+        <KanbanMetrics />
+      </div>
     </div>
   );
 }
