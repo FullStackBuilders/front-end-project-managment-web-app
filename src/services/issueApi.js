@@ -84,6 +84,16 @@ export const issueApi = {
     }
   },
 
+  removeAssigneeFromIssue: async (issueId) => {
+    try {
+      const response = await ApiService.delete(`/api/issues/${issueId}/assignee`);
+      return response.data;
+    } catch (error) {
+      console.error("Error removing assignee:", error);
+      throw error;
+    }
+  },
+
   getIssueDetailById: async (issueId) => {
     try {
       const response = await ApiService.get(`/api/issues/${issueId}/detail`);

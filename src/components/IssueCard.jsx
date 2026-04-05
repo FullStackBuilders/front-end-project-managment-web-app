@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { format } from "date-fns";
 import { Calendar, Eye, UserPlus, Trash2, Edit, Flag } from "lucide-react";
@@ -29,10 +29,19 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
   const [showDetailModal, setShowDetailModal] = useState(false); // New state for detail modal
   const [isDeleting, setIsDeleting] = useState(false);
   const dispatch = useDispatch();
-  const { isCreator, isProjectOwner, canAssignIssue } = useAuth();
+  const { isCreator, isProjectOwner, canAssignIssue, canUpdateIssueStatus } = useAuth();
   const { currentProject } = useSelector((state) => state.project);
 
+  const projectMembersForAssignee = useMemo(() => {
+    const owner = currentProject?.owner;
+    const team = currentProject?.team || [];
+    if (!owner) return team;
+    const seen = new Set([owner.id]);
+    return [owner, ...team.filter((m) => !seen.has(m.id))];
+  }, [currentProject]);
+
   const canEditOrDelete = isCreator(issue.createdById) || isProjectOwner(issue.projectOwnerId);
+  const canOpenEditModal = canEditOrDelete || canUpdateIssueStatus(issue);
   const canAssign = canAssignIssue(issue);
 
   const handleDeleteClick = (e) => {
@@ -147,7 +156,7 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
                 </span>
               </div>
             ) : (
-              <span className="text-xs text-gray-400 italic">No one</span>
+              <span className="text-xs text-gray-600">Unassigned</span>
             )}
           </div>
 
@@ -194,7 +203,7 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
               </Button>
             )}
 
-            {canEditOrDelete && (
+            {canOpenEditModal && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -229,7 +238,7 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
           showModal={showAssigneeModal}
           setShowModal={setShowAssigneeModal}
           issue={issue}
-          projectMembers={currentProject?.team || []}
+          projectMembers={projectMembersForAssignee}
         />
       )}
 

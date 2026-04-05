@@ -242,7 +242,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                         </span>
                       </div>
                     ) : (
-                      <span className="text-gray-400 italic">Not assigned</span>
+                      <span className="text-gray-600 text-sm">Unassigned</span>
                     )}
                   </div>
 

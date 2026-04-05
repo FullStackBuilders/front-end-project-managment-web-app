@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, GripVertical } from 'lucide-react';
 import IssueCard from './IssueCard';
 import CreateIssueModal from './CreateIssueModal';
+import EditTaskModal from './EditTaskModal';
 import ErrorModal from './ErrorModal';
 import IssueFilterButton from './IssueFilterButton';
 import { updateIssueStatus, moveIssue, rollbackIssueMove, selectBoardFilteredIssues } from '../store/issueSlice';
@@ -290,11 +291,13 @@ export default function KanbanBoard({ projectId }) {
 
   const handleEditIssue = (issue) => {
     setEditingIssue(issue);
-    setShowCreateModal(true);
   };
 
-  const handleCloseModal = () => {
+  const handleCloseCreateModal = () => {
     setShowCreateModal(false);
+  };
+
+  const handleCloseEditModal = () => {
     setEditingIssue(null);
   };
 
@@ -367,16 +370,21 @@ export default function KanbanBoard({ projectId }) {
         </DragOverlay>
       </DndContext>
 
-      {/* Create/Edit Issue Modal */}
       {showCreateModal && (
         <CreateIssueModal
           showModal={showCreateModal}
-          setShowModal={handleCloseModal}
+          setShowModal={handleCloseCreateModal}
           projectId={projectId}
-          editingIssue={editingIssue}
           projectMembers={allMembers}
         />
       )}
+
+      <EditTaskModal
+        showModal={!!editingIssue}
+        onClose={handleCloseEditModal}
+        issue={editingIssue}
+        projectMembers={allMembers}
+      />
     </div>
   );
 }

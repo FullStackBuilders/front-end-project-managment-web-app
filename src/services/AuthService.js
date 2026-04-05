@@ -84,7 +84,7 @@ const decoded = this.decodeToken(token);
 if (!decoded) return false;
 const currentTime = Date.now() / 1000;
 return decoded.exp > currentTime;
- } catch (error) {
+ } catch {
 return false;
  }
  }
@@ -117,12 +117,11 @@ this.isCurrentUserProjectOwner(issue.projectOwnerId)
 canUpdateIssueStatus(issue) {
 const currentUserId = this.getCurrentUserId();
 if (!currentUserId) return false;
-// Can update status if user is:
-// 1. Assignee
-// 2. Issue creator
-// 3. Project owner
+// Redux/API issues use assigneeId; nested assignee may exist on some payloads
+const assigneeId = issue.assigneeId ?? issue.assignee?.id;
+const isAssignee = assigneeId != null && Number(assigneeId) === Number(currentUserId);
 return (
- (issue.assignee && issue.assignee.id === currentUserId) ||
+ isAssignee ||
 this.isCurrentUserCreator(issue.createdById) ||
 this.isCurrentUserProjectOwner(issue.projectOwnerId)
  );

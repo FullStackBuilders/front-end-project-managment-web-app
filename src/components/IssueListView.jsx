@@ -1,21 +1,16 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { Plus, Flag, SlidersHorizontal, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatSmartTimestamp } from '../utils/dateUtils';
 import { useAuth } from '../context/AuthContext';
-import {
-  updateIssue,
-  updateIssueStatus,
-  addAssignee,
-  deleteIssue,
-  selectListFilteredIssues,
-} from '../store/issueSlice';
+import { deleteIssue, selectListFilteredIssues } from '../store/issueSlice';
 import CreateIssueModal from './CreateIssueModal';
+import EditTaskModal from './EditTaskModal';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
-import ErrorModal from './ErrorModal';
 import IssueFilterButton from './IssueFilterButton';
+import StatusBadge from './StatusBadge';
 
 const COLUMN_DEFINITIONS = [
   { id: 'name',         label: 'Name',           defaultVisible: true  },
@@ -30,14 +25,7 @@ const COLUMN_DEFINITIONS = [
   { id: 'assignedBy',   label: 'Assigned By',    defaultVisible: false },
 ];
 
-const SORTABLE_COLUMNS = new Set([
-  'name', 'priority', 'assignedTo', 'createdBy', 'dueDate', 'lastEditedBy', 'lastEditedAt', 'assignedBy',
-]);
-
-// Lower number = sorts first when ascending (High → Medium → Low)
 const PRIORITY_ORDER = { HIGH: 1, MEDIUM: 2, LOW: 3 };
-
-// First-click direction: 'asc' for most columns, 'desc' for "newest first" timestamp
 const SORT_DEFAULT_DIR = { lastEditedAt: 'desc' };
 
 const getSortValue = (issue, col) => {
@@ -48,11 +36,11 @@ const getSortValue = (issue, col) => {
     case 'createdBy':    return (issue.createdByName || '').toLowerCase();
     case 'dueDate':      return issue.dueDate
                            ? new Date(issue.dueDate + 'T00:00:00').getTime()
-                           : Infinity;   // nulls last when ascending
+                           : Infinity;
     case 'lastEditedBy': return (issue.lastEditedByName || '').toLowerCase();
     case 'lastEditedAt': return issue.lastEditedAt
                            ? new Date(issue.lastEditedAt).getTime()
-                           : 0;         // never-edited sorts oldest
+                           : 0;
     case 'assignedBy':   return (issue.assignedByName || '').toLowerCase();
     default: return '';
   }
@@ -66,40 +54,36 @@ function SortIcon({ col, sortCol, sortDir }) {
     : <ChevronDown className="w-3 h-3 text-primary flex-shrink-0" />;
 }
 
-const STATUS_OPTIONS = ['TO_DO', 'IN_PROGRESS', 'DONE'];
-const PRIORITY_OPTIONS = ['HIGH', 'MEDIUM', 'LOW'];
-
-const STATUS_LABELS = { TO_DO: 'TO DO', IN_PROGRESS: 'IN PROGRESS', DONE: 'DONE' };
-const STATUS_COLORS = {
-  TO_DO: 'bg-gray-100 text-gray-700',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700',
-  DONE: 'bg-green-100 text-green-700',
-};
 const PRIORITY_COLORS = {
   HIGH: 'bg-red-100 text-red-700 border-red-200',
   MEDIUM: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   LOW: 'bg-green-100 text-green-700 border-green-200',
 };
 
-function Badge({ value, colorMap, withFlag = false, withBorder = false, labelMap = null }) {
-  const displayValue = labelMap?.[value] || value;
-
+function Badge({ value, colorMap, withFlag = false, withBorder = false }) {
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${withBorder ? 'border' : ''} ${colorMap[value] || 'bg-gray-100 text-gray-600'}`}
     >
       {withFlag && <Flag className="w-3 h-3 mr-1" />}
-      {displayValue}
+      {value}
     </span>
   );
 }
 
-function TruncatedCell({ value, issueId, field, expandedCell, setExpandedCell }) {
+function TruncatedCell({
+  value,
+  issueId,
+  field,
+  expandedCell,
+  setExpandedCell,
+  emptyLabel = '—',
+  emptyClassName = 'text-gray-400',
+}) {
   const isExpanded = expandedCell?.issueId === issueId && expandedCell?.field === field;
   const triggerRef = useRef(null);
   const popupRef   = useRef(null);
 
-  // Close when clicking outside both the trigger and the portal popup
   useEffect(() => {
     if (!isExpanded) return;
     const handler = (e) => {
@@ -114,7 +98,6 @@ function TruncatedCell({ value, issueId, field, expandedCell, setExpandedCell })
     return () => document.removeEventListener('mousedown', handler);
   }, [isExpanded, setExpandedCell]);
 
-  // Calculate position inline — no state needed, ref is always available from previous render
   let popupStyle = null;
   if (isExpanded && triggerRef.current) {
     const rect       = triggerRef.current.getBoundingClientRect();
@@ -138,13 +121,13 @@ function TruncatedCell({ value, issueId, field, expandedCell, setExpandedCell })
       <div
         ref={triggerRef}
         className="max-w-[160px] truncate cursor-pointer hover:text-primary"
-        title={value || '—'}
+        title={value || emptyLabel}
         onClick={(e) => {
           e.stopPropagation();
           if (value) setExpandedCell(isExpanded ? null : { issueId, field });
         }}
       >
-        {value || <span className="text-gray-400">—</span>}
+        {value || <span className={emptyClassName}>{emptyLabel}</span>}
       </div>
       {isExpanded && popupStyle && createPortal(
         <div
@@ -161,27 +144,20 @@ function TruncatedCell({ value, issueId, field, expandedCell, setExpandedCell })
   );
 }
 
-function memberFullName(member) {
-  return `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.email || `User #${member.id}`;
-}
-
 export default function IssueListView({ projectId }) {
   const dispatch = useDispatch();
-  const { isCreator, isProjectOwner } = useAuth();
+  const { isCreator, isProjectOwner, canUpdateIssueStatus } = useAuth();
   const issues = useSelector(selectListFilteredIssues);
   const { currentProject } = useSelector((state) => state.project);
 
-  const [editingRowId, setEditingRowId] = useState(null);
-  const [editingValues, setEditingValues] = useState({});
   const [expandedCell, setExpandedCell] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [modalEditIssue, setModalEditIssue] = useState(null);
   const [pendingDeleteIssue, setPendingDeleteIssue] = useState(null);
-  const [saveError, setSaveError] = useState(null);   // string | null
-  const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const [sortCol, setSortCol] = useState(null);  // column id or null
-  const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
 
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const defaultColumns = Object.fromEntries(
@@ -200,7 +176,6 @@ export default function IssueListView({ projectId }) {
   const containerRef = useRef(null);
   const colsRef = useRef(null);
 
-  // Build deduplicated member list: owner first, then team
   const allMembers = useMemo(() => {
     const owner = currentProject?.owner;
     const team = currentProject?.team || [];
@@ -220,7 +195,6 @@ export default function IssueListView({ projectId }) {
     });
   }, [issues, sortCol, sortDir]);
 
-  // Close expanded cell on outside click
   useEffect(() => {
     const handleMouseDown = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -231,12 +205,10 @@ export default function IssueListView({ projectId }) {
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, []);
 
-  // Persist column visibility to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem(`teamboard_list_cols_${projectId}`, JSON.stringify(visibleColumns));
   }, [visibleColumns, projectId]);
 
-  // Close the columns dropdown on outside click
   useEffect(() => {
     if (!colsOpen) return;
     const handler = (e) => { if (!colsRef.current?.contains(e.target)) setColsOpen(false); };
@@ -244,13 +216,19 @@ export default function IssueListView({ projectId }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [colsOpen]);
 
-  const canEditOrDelete = (issue) =>
-    isCreator(issue.createdById) || isProjectOwner(issue.projectOwnerId);
+  const canEditOrDelete = useCallback(
+    (issue) => isCreator(issue.createdById) || isProjectOwner(issue.projectOwnerId),
+    [isCreator, isProjectOwner]
+  );
+
+  const canOpenEditModal = useCallback(
+    (issue) => canEditOrDelete(issue) || canUpdateIssueStatus(issue),
+    [canEditOrDelete, canUpdateIssueStatus]
+  );
 
   const showActionsColumn = useMemo(
-    () => issues.some((issue) => canEditOrDelete(issue)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [issues]
+    () => issues.some((issue) => canOpenEditModal(issue)),
+    [issues, canOpenEditModal]
   );
 
   const isOverdue = (issue) =>
@@ -267,66 +245,6 @@ export default function IssueListView({ projectId }) {
     }
   };
 
-  const startEdit = (issue) => {
-    setSaveError(null);
-    setExpandedCell(null);
-    setEditingRowId(issue.id);
-    setEditingValues({
-      title: issue.title || '',
-      description: issue.description || '',
-      priority: issue.priority || 'MEDIUM',
-      dueDate: issue.dueDate ? issue.dueDate.split('T')[0] : '',
-      status: issue.status || 'TO_DO',
-      // Store as string for controlled select comparison; '' = None
-      assigneeId: issue.assigneeId != null ? String(issue.assigneeId) : '',
-    });
-  };
-
-  const cancelEdit = () => {
-    setEditingRowId(null);
-    setEditingValues({});
-    setSaveError(null);
-  };
-
-  const saveEdit = async (issue) => {
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      await dispatch(
-        updateIssue({
-          issueId: issue.id,
-          issueData: {
-            title: editingValues.title,
-            description: editingValues.description,
-            priority: editingValues.priority,
-            dueDate: editingValues.dueDate || null,
-          },
-        })
-      ).unwrap();
-
-      if (editingValues.status !== issue.status) {
-        await dispatch(
-          updateIssueStatus({ issueId: issue.id, status: editingValues.status })
-        ).unwrap();
-      }
-
-      const originalAssigneeId = issue.assigneeId != null ? String(issue.assigneeId) : '';
-      if (editingValues.assigneeId && editingValues.assigneeId !== originalAssigneeId) {
-        await dispatch(
-          addAssignee({ issueId: issue.id, userId: editingValues.assigneeId })
-        ).unwrap();
-      }
-
-      setEditingRowId(null);
-      setEditingValues({});
-    } catch (err) {
-      const msg = err?.message || String(err) || 'Failed to save changes. Please try again.';
-      setSaveError(msg);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const confirmDelete = async () => {
     if (!pendingDeleteIssue) return;
     setIsDeleting(true);
@@ -334,7 +252,7 @@ export default function IssueListView({ projectId }) {
       await dispatch(deleteIssue(pendingDeleteIssue.id)).unwrap();
       setPendingDeleteIssue(null);
     } catch {
-      // delete errors are surfaced via Redux state if needed
+      // errors surfaced via Redux if needed
     } finally {
       setIsDeleting(false);
     }
@@ -342,7 +260,6 @@ export default function IssueListView({ projectId }) {
 
   const col = (id) => visibleColumns[id] ?? true;
 
-  // mm/dd/yyyy
   const formatDate = (dateStr) => {
     if (!dateStr) return '—';
     try {
@@ -353,13 +270,15 @@ export default function IssueListView({ projectId }) {
     }
   };
 
+  const openEditModal = (issue) => {
+    setExpandedCell(null);
+    setModalEditIssue(issue);
+  };
 
   return (
     <div ref={containerRef} onClick={() => setExpandedCell(null)} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      {/* Header row */}
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
-          {/* Column visibility toggle */}
           <div className="relative" ref={colsRef}>
             <button
               onClick={() => setColsOpen((o) => !o)}
@@ -386,7 +305,6 @@ export default function IssueListView({ projectId }) {
             )}
           </div>
 
-          {/* Filter button — sits immediately to the right of the Columns button */}
           <IssueFilterButton view="list" align="start" />
         </div>
 
@@ -480,13 +398,8 @@ export default function IssueListView({ projectId }) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {sortedIssues.map((issue) => {
-                const editing = editingRowId === issue.id;
                 const overdue = isOverdue(issue);
-                const rowBg = editing
-                  ? 'bg-gray-50'
-                  : overdue
-                  ? 'bg-red-50'
-                  : 'bg-white';
+                const rowBg = overdue ? 'bg-red-50' : 'bg-white';
 
                 return (
                   <tr
@@ -494,121 +407,53 @@ export default function IssueListView({ projectId }) {
                     className={`${rowBg} hover:brightness-[0.98] transition-colors`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {/* ID */}
                     <td className="px-3 py-3 text-gray-500 whitespace-nowrap font-mono text-xs">
                       #{issue.id}
                     </td>
 
-                    {/* Name */}
                     {col('name') && (
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {editing ? (
-                          <input
-                            type="text"
-                            value={editingValues.title}
-                            onChange={(e) =>
-                              setEditingValues((v) => ({ ...v, title: e.target.value }))
-                            }
-                            className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary w-40"
-                          />
-                        ) : (
-                          <TruncatedCell
-                            value={issue.title}
-                            issueId={issue.id}
-                            field="title"
-                            expandedCell={expandedCell}
-                            setExpandedCell={setExpandedCell}
-                          />
-                        )}
+                        <TruncatedCell
+                          value={issue.title}
+                          issueId={issue.id}
+                          field="title"
+                          expandedCell={expandedCell}
+                          setExpandedCell={setExpandedCell}
+                        />
                       </td>
                     )}
 
-                    {/* Status */}
                     {col('status') && (
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {editing ? (
-                          <select
-                            value={editingValues.status}
-                            onChange={(e) =>
-                              setEditingValues((v) => ({ ...v, status: e.target.value }))
-                            }
-                            className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                          >
-                            {STATUS_OPTIONS.map((s) => (
-                              <option key={s} value={s}>
-                                {STATUS_LABELS[s]}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <Badge
-                            value={issue.status}
-                            colorMap={STATUS_COLORS}
-                            labelMap={STATUS_LABELS}
-                          />
-                        )}
+                        <StatusBadge status={issue.status} />
                       </td>
                     )}
 
-                    {/* Priority */}
                     {col('priority') && (
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {editing ? (
-                          <select
-                            value={editingValues.priority}
-                            onChange={(e) =>
-                              setEditingValues((v) => ({ ...v, priority: e.target.value }))
-                            }
-                            className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                          >
-                            {PRIORITY_OPTIONS.map((p) => (
-                              <option key={p} value={p}>
-                                {p}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <Badge
-                            value={issue.priority}
-                            colorMap={PRIORITY_COLORS}
-                            withFlag
-                            withBorder
-                          />
-                        )}
+                        <Badge
+                          value={issue.priority}
+                          colorMap={PRIORITY_COLORS}
+                          withFlag
+                          withBorder
+                        />
                       </td>
                     )}
 
-                    {/* Assigned To */}
                     {col('assignedTo') && (
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {editing ? (
-                          <select
-                            value={editingValues.assigneeId}
-                            onChange={(e) =>
-                              setEditingValues((v) => ({ ...v, assigneeId: e.target.value }))
-                            }
-                            className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                          >
-                            <option value="">— None —</option>
-                            {allMembers.map((member) => (
-                              <option key={member.id} value={String(member.id)}>
-                                {memberFullName(member)}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <TruncatedCell
-                            value={issue.assigneeName}
-                            issueId={issue.id}
-                            field="assigneeName"
-                            expandedCell={expandedCell}
-                            setExpandedCell={setExpandedCell}
-                          />
-                        )}
+                        <TruncatedCell
+                          value={issue.assigneeName}
+                          issueId={issue.id}
+                          field="assigneeName"
+                          expandedCell={expandedCell}
+                          setExpandedCell={setExpandedCell}
+                          emptyLabel="Unassigned"
+                          emptyClassName="text-gray-600 text-sm"
+                        />
                       </td>
                     )}
 
-                    {/* Created By */}
                     {col('createdBy') && (
                       <td className="px-3 py-3 whitespace-nowrap">
                         <TruncatedCell
@@ -621,51 +466,26 @@ export default function IssueListView({ projectId }) {
                       </td>
                     )}
 
-                    {/* Due Date */}
                     {col('dueDate') && (
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {editing ? (
-                          <input
-                            type="date"
-                            value={editingValues.dueDate}
-                            onChange={(e) =>
-                              setEditingValues((v) => ({ ...v, dueDate: e.target.value }))
-                            }
-                            className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                          />
-                        ) : (
-                          <span className={`text-gray-700 ${overdue ? 'text-red-600 font-medium' : ''}`}>
-                            {formatDate(issue.dueDate)}
-                          </span>
-                        )}
+                        <span className={`text-gray-700 ${overdue ? 'text-red-600 font-medium' : ''}`}>
+                          {formatDate(issue.dueDate)}
+                        </span>
                       </td>
                     )}
 
-                    {/* Description */}
                     {col('description') && (
                       <td className="px-3 py-3">
-                        {editing ? (
-                          <textarea
-                            value={editingValues.description}
-                            onChange={(e) =>
-                              setEditingValues((v) => ({ ...v, description: e.target.value }))
-                            }
-                            rows={2}
-                            className="w-48 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-                          />
-                        ) : (
-                          <TruncatedCell
-                            value={issue.description}
-                            issueId={issue.id}
-                            field="description"
-                            expandedCell={expandedCell}
-                            setExpandedCell={setExpandedCell}
-                          />
-                        )}
+                        <TruncatedCell
+                          value={issue.description}
+                          issueId={issue.id}
+                          field="description"
+                          expandedCell={expandedCell}
+                          setExpandedCell={setExpandedCell}
+                        />
                       </td>
                     )}
 
-                    {/* Last Edited By */}
                     {col('lastEditedBy') && (
                       <td className="px-3 py-3 whitespace-nowrap">
                         <TruncatedCell
@@ -678,14 +498,12 @@ export default function IssueListView({ projectId }) {
                       </td>
                     )}
 
-                    {/* Last Edited At */}
                     {col('lastEditedAt') && (
                       <td className="px-3 py-3 whitespace-nowrap text-gray-500 text-xs">
                         {formatSmartTimestamp(issue.lastEditedAt) || '—'}
                       </td>
                     )}
 
-                    {/* Assigned By */}
                     {col('assignedBy') && (
                       <td className="px-3 py-3 whitespace-nowrap">
                         <TruncatedCell
@@ -698,44 +516,28 @@ export default function IssueListView({ projectId }) {
                       </td>
                     )}
 
-                    {/* Actions */}
                     {showActionsColumn && (
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {canEditOrDelete(issue) ? (
-                          editing ? (
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => saveEdit(issue)}
-                                disabled={isSaving}
-                                className="px-3 py-1 text-xs font-medium bg-primary text-white rounded hover:opacity-90 disabled:opacity-50"
-                              >
-                                {isSaving ? 'Saving…' : 'Save'}
-                              </button>
-                              <button
-                                onClick={cancelEdit}
-                                disabled={isSaving}
-                                className="px-3 py-1 text-xs font-medium border border-gray-300 text-gray-600 rounded hover:bg-gray-50 disabled:opacity-50"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => startEdit(issue)}
-                                className="px-3 py-1 text-xs font-medium border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => setPendingDeleteIssue(issue)}
-                                className="px-3 py-1 text-xs font-medium border border-red-200 text-red-600 rounded hover:bg-red-50"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          )
-                        ) : null}
+                        <div className="flex gap-2 flex-wrap">
+                          {canOpenEditModal(issue) && (
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(issue)}
+                              className="px-3 py-1 text-xs font-medium border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {canEditOrDelete(issue) && (
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteIssue(issue)}
+                              className="px-3 py-1 text-xs font-medium border border-red-200 text-red-600 rounded hover:bg-red-50"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -746,27 +548,22 @@ export default function IssueListView({ projectId }) {
         </div>
       )}
 
-      {/* Save Error Modal */}
-      <ErrorModal
-        open={!!saveError}
-        onClose={() => setSaveError(null)}
-        title="Failed to save changes"
-        message={saveError}
-        onRetry={null}
-      />
-
-      {/* Create Issue Modal */}
       {showCreateModal && (
         <CreateIssueModal
           showModal={showCreateModal}
           setShowModal={setShowCreateModal}
           projectId={projectId}
-          editingIssue={null}
           projectMembers={allMembers}
         />
       )}
 
-      {/* Delete Confirmation Modal */}
+      <EditTaskModal
+        showModal={!!modalEditIssue}
+        onClose={() => setModalEditIssue(null)}
+        issue={modalEditIssue}
+        projectMembers={allMembers}
+      />
+
       {pendingDeleteIssue && (
         <DeleteConfirmationModal
           showModal={!!pendingDeleteIssue}

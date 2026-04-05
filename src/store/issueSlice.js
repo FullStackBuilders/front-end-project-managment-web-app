@@ -82,6 +82,18 @@ export const addAssignee = createAsyncThunk(
   }
 );
 
+export const clearAssignee = createAsyncThunk(
+  'issues/clearAssignee',
+  async (issueId, { rejectWithValue }) => {
+    try {
+      const response = await issueApi.removeAssigneeFromIssue(issueId);
+      return response;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 const makeInitialFiltersByView = () => ({
   board:    { ...INITIAL_FILTERS },
   list:     { ...INITIAL_FILTERS },
@@ -208,6 +220,16 @@ const issueSlice = createSlice({
         }
       })
       .addCase(addAssignee.rejected, (state, action) => {
+        state.error = action.payload;
+      })
+
+      .addCase(clearAssignee.fulfilled, (state, action) => {
+        const index = state.issues.findIndex((issue) => issue.id === action.payload.id);
+        if (index !== -1) {
+          state.issues[index] = action.payload;
+        }
+      })
+      .addCase(clearAssignee.rejected, (state, action) => {
         state.error = action.payload;
       });
   },
