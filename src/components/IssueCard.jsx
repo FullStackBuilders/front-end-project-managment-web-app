@@ -169,9 +169,9 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
           )}
 
           {/* Last edited info */}
-          {issue.lastEditedByName && (
+          {issue.lastUpdatedByName && (
             <p className="text-xs text-gray-400 mb-2">
-              Edited by {issue.lastEditedByName} · {formatSmartTimestamp(issue.lastEditedAt)}
+              Updated by {issue.lastUpdatedByName} · {formatSmartTimestamp(issue.lastUpdatedAt)}
             </p>
           )}
 

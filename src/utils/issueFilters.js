@@ -1,4 +1,8 @@
 import { isToday, isThisWeek, isThisMonth, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { issueSprintId } from './scrumBacklogUtils';
+
+/** Scrum board: show issues from every ACTIVE sprint (not a specific sprint id). */
+export const SCRUM_BOARD_SPRINT_ALL = 'all';
 
 export const INITIAL_FILTERS = {
   assignedToMe: false,
@@ -7,6 +11,8 @@ export const INITIAL_FILTERS = {
   dueDatePreset: null,  // null | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM'
   dueDateFrom: null,    // ISO date string — only meaningful when dueDatePreset === 'CUSTOM'
   dueDateTo: null,      // ISO date string — only meaningful when dueDatePreset === 'CUSTOM'
+  /** Scrum board only: scope to this sprint id; null = unused (other views). */
+  sprintId: null,
 };
 
 /**
@@ -17,7 +23,8 @@ export function isFiltersEmpty(filters) {
     !filters.assignedToMe &&
     filters.priorities.length === 0 &&
     filters.statuses.length === 0 &&
-    filters.dueDatePreset === null
+    filters.dueDatePreset === null &&
+    (filters.sprintId === null || filters.sprintId === undefined)
   );
 }
 
@@ -26,11 +33,16 @@ export function isFiltersEmpty(filters) {
  * Each group counts as 1 regardless of how many values within it are selected.
  */
 export function countActiveFilters(filters) {
+  const sprintScoped =
+    filters.sprintId != null &&
+    filters.sprintId !== undefined &&
+    filters.sprintId !== SCRUM_BOARD_SPRINT_ALL;
   return (
     (filters.assignedToMe ? 1 : 0) +
     (filters.priorities.length > 0 ? 1 : 0) +
     (filters.statuses.length > 0 ? 1 : 0) +
-    (filters.dueDatePreset !== null ? 1 : 0)
+    (filters.dueDatePreset !== null ? 1 : 0) +
+    (sprintScoped ? 1 : 0)
   );
 }
 
@@ -46,6 +58,15 @@ export function applyFilters(issues, filters, currentUserId) {
   if (isFiltersEmpty(filters)) return issues;
 
   return issues.filter((issue) => {
+    // ── Sprint (scrum board) ──────────────────────────────────────────────────
+    if (
+      filters.sprintId != null &&
+      filters.sprintId !== undefined &&
+      filters.sprintId !== SCRUM_BOARD_SPRINT_ALL
+    ) {
+      if (issueSprintId(issue) !== filters.sprintId) return false;
+    }
+
     // ── Assigned to Me ────────────────────────────────────────────────────────
     if (filters.assignedToMe) {
       if (!currentUserId || issue.assigneeId !== currentUserId) return false;

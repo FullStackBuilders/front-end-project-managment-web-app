@@ -104,6 +104,32 @@ export const issueApi = {
     }
   },
 
+  /** Merged activity + comments, newest first (see IssueTimelineData on backend). */
+  getIssueTimeline: async (issueId, limit = 200) => {
+    try {
+      const q = limit != null ? `?limit=${encodeURIComponent(limit)}` : "";
+      const response = await ApiService.get(
+        `/api/issues/${issueId}/timeline${q}`,
+      );
+      return response.data ?? { items: [], limit: limit ?? 200 };
+    } catch (error) {
+      console.error("Error fetching issue timeline:", error);
+      throw new Error("Failed to fetch issue timeline");
+    }
+  },
+
+  assignIssueSprint: async (issueId, sprintId) => {
+    try {
+      const response = await ApiService.patch(`/api/issues/${issueId}/sprint`, {
+        sprintId: sprintId ?? null,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error assigning sprint:", error);
+      throw error;
+    }
+  },
+
   // Update issue status
   updateIssueStatus: async (issueId, status) => {
     try {

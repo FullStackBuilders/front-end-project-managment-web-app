@@ -1,17 +1,16 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { format } from "date-fns";
-import { X, Calendar, Flag, MessageSquare, Send } from "lucide-react";
+import { X, Calendar, Flag } from "lucide-react";
 import { formatSmartTimestamp } from "../utils/dateUtils";
+import { parseOccurredAt } from "../utils/activityDisplay";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../context/AuthContext";
 import { issueApi } from "../services/issueApi";
 import { getAvatarColor } from "../utils/avatarColor";
-import {
-  fetchCommentsByIssue,
-  addComment,
-  clearCommentsForIssue,
-} from "../store/commentSlice";
+import { addComment, clearCommentsForIssue } from "../store/commentSlice";
+import IssueActivitySection from "./issue/IssueActivitySection";
+import { Send } from "lucide-react";
 
 const PRIORITY_COLORS = {
   HIGH: "bg-red-100 text-red-800 border-red-200",
@@ -31,41 +30,27 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
   const [error, setError] = useState(null);
   const [newComment, setNewComment] = useState("");
 
+  const [activityTab, setActivityTab] = useState("all");
+  const [timelineItems, setTimelineItems] = useState([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState(null);
+
   const dispatch = useDispatch();
   const { user } = useAuth();
-  const { commentsByIssue, loading: commentsLoading } = useSelector(
-    (state) => state.comments
-  );
+  const commentSubmitting = useSelector((state) => state.comments.loading);
 
-  const comments = commentsByIssue[issueId] || [];
   const commentsEndRef = useRef(null);
 
-  useEffect(() => {
-    if (showModal && issueId) {
-      fetchIssueDetail();
-      dispatch(fetchCommentsByIssue(issueId));
-    }
+  const timelineComments = useMemo(() => {
+    const rows = timelineItems.filter((i) => i.kind === "comment");
+    return [...rows].reverse();
+  }, [timelineItems]);
 
-    return () => {
-      if (!showModal) {
-        dispatch(clearCommentsForIssue(issueId));
-      }
-    };
-  }, [showModal, issueId, dispatch]);
-
-  useEffect(() => {
-    if (showModal && comments.length > 0) {
-      scrollToBottom();
-    }
-  }, [comments, showModal]);
-
-  const scrollToBottom = () => {
-    commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const fetchIssueDetail = async () => {
+  const fetchIssueDetail = useCallback(async () => {
+    if (!issueId) return;
     try {
       setLoading(true);
+      setError(null);
       const response = await issueApi.getIssueDetailById(issueId);
       setIssueDetail(response);
     } catch (err) {
@@ -74,7 +59,35 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [issueId]);
+
+  const fetchTimeline = useCallback(async () => {
+    if (!issueId) return;
+    try {
+      setTimelineLoading(true);
+      setTimelineError(null);
+      const data = await issueApi.getIssueTimeline(issueId, 200);
+      setTimelineItems(Array.isArray(data?.items) ? data.items : []);
+    } catch (err) {
+      console.error("Failed to fetch timeline:", err);
+      setTimelineError(err.message || "Failed to load activity");
+      setTimelineItems([]);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [issueId]);
+
+  useEffect(() => {
+    if (!showModal || !issueId) return;
+    fetchIssueDetail();
+    fetchTimeline();
+  }, [showModal, issueId, fetchIssueDetail, fetchTimeline]);
+
+  useEffect(() => {
+    if (showModal && activityTab === "comments" && timelineComments.length > 0) {
+      commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [timelineComments.length, showModal, activityTab]);
 
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
@@ -84,6 +97,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
         addComment({ issueId, content: newComment.trim() })
       ).unwrap();
       setNewComment("");
+      await fetchTimeline();
     } catch (err) {
       console.error("Failed to add comment:", err);
     }
@@ -101,12 +115,11 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
   const formatDateTime = (dateTimeString) => {
     if (!dateTimeString) return "";
     try {
-      return format(new Date(dateTimeString), "MMM dd, yyyy HH:mm");
+      return format(new Date(dateTimeString), "MMM dd, yyyy h:mm a");
     } catch {
       return "Invalid date";
     }
   };
-
 
   const canComment = () => {
     if (!user || !issueDetail) return false;
@@ -128,8 +141,14 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
   };
 
   const handleClose = () => {
+    if (issueId) dispatch(clearCommentsForIssue(issueId));
+    setActivityTab("all");
     setShowModal(false);
   };
+
+  /** Legacy rows may lack assignedBy; fall back to creator for display. */
+  const assignedByDisplayName =
+    issueDetail?.assignedByName || issueDetail?.createdByName || null;
 
   if (!showModal) return null;
 
@@ -246,18 +265,18 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                     )}
                   </div>
 
-                  {/* Assigned By */}
+                  {/* Assigned By (fallback to creator when assignedBy absent) */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Assigned By
                     </label>
-                    {issueDetail.assignedByName ? (
+                    {assignedByDisplayName ? (
                       <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 ${getAvatarColor(issueDetail.assignedByName)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
-                          {getUserInitials(issueDetail.assignedByName)}
+                        <div className={`w-8 h-8 ${getAvatarColor(assignedByDisplayName)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
+                          {getUserInitials(assignedByDisplayName)}
                         </div>
                         <span className="text-gray-900">
-                          {issueDetail.assignedByName}
+                          {assignedByDisplayName}
                         </span>
                       </div>
                     ) : (
@@ -316,101 +335,110 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                 </div>
               </div>
 
-              {/* Last Edited metadata — only shown after a content edit has occurred */}
-              {issueDetail.lastEditedByName && (
+              {/* Last Updated metadata — only shown after a post-creation update has occurred */}
+              {issueDetail.lastUpdatedByName && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Edited By
+                      Last Updated By
                     </label>
                     <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 ${getAvatarColor(issueDetail.lastEditedByName)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
-                        {getUserInitials(issueDetail.lastEditedByName)}
+                      <div className={`w-8 h-8 ${getAvatarColor(issueDetail.lastUpdatedByName)} text-white rounded-full flex items-center justify-center text-sm font-medium`}>
+                        {getUserInitials(issueDetail.lastUpdatedByName)}
                       </div>
-                      <span className="text-gray-900">{issueDetail.lastEditedByName}</span>
+                      <span className="text-gray-900">{issueDetail.lastUpdatedByName}</span>
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Edited At
+                      Last Updated At
                     </label>
                     <span className="text-gray-900">
-                      {formatSmartTimestamp(issueDetail.lastEditedAt)}
+                      {formatSmartTimestamp(issueDetail.lastUpdatedAt)}
                     </span>
                   </div>
                 </div>
               )}
 
-              {/* Comments */}
-              <div className="border-t pt-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <MessageSquare className="w-5 h-5 text-gray-600" />
-                  <h4 className="text-lg font-medium text-gray-900">
-                    Comments ({comments.length})
-                  </h4>
-                </div>
-
-                {/* Comment list */}
-                <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
-                  {commentsLoading ? (
-                    <div className="text-center py-4 text-gray-500">
-                      Loading comments...
-                    </div>
-                  ) : comments.length > 0 ? (
-                    comments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="bg-gray-50 rounded-lg p-3"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-6 h-6 ${getAvatarColor(comment.userName)} text-white rounded-full flex items-center justify-center text-xs font-medium`}>
-                              {getUserInitials(comment.userName)}
-                            </div>
-                            <span className="text-sm font-medium text-gray-900">
-                              {comment.userName || "Unknown User"}
-                            </span>
-                          </div>
-                          <span className="text-xs text-gray-500">
-                            {formatDateTime(comment.createdDateTime)}
-                          </span>
-                        </div>
-                        <p className="text-gray-700 text-sm">
-                          {comment.content || ""}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500 text-center py-4">
-                      No comments yet
+              <IssueActivitySection
+                activeTab={activityTab}
+                onTabChange={setActivityTab}
+                items={timelineItems}
+                loading={timelineLoading}
+                error={timelineError}
+                onRetry={fetchTimeline}
+                renderCommentsTab={() => (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-3">
+                      {timelineComments.length} comment
+                      {timelineComments.length !== 1 ? "s" : ""}
                     </p>
-                  )}
-                  <div ref={commentsEndRef} />
-                </div>
+                    <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                      {timelineLoading ? (
+                        <div className="text-center py-4 text-gray-500 text-sm">
+                          Loading comments…
+                        </div>
+                      ) : timelineComments.length > 0 ? (
+                        timelineComments.map((row, idx) => {
+                          const iso = parseOccurredAt(row.occurredAt);
+                          return (
+                            <div
+                              key={row.commentId ?? `comment-${idx}`}
+                              className="bg-gray-50 rounded-lg p-3"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className={`w-6 h-6 ${getAvatarColor(row.commentAuthorName)} text-white rounded-full flex items-center justify-center text-xs font-medium`}
+                                  >
+                                    {getUserInitials(row.commentAuthorName)}
+                                  </div>
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {row.commentAuthorName || "Unknown User"}
+                                  </span>
+                                </div>
+                                <span className="text-xs text-gray-500">
+                                  {formatDateTime(iso)}
+                                </span>
+                              </div>
+                              <p className="text-gray-700 text-sm">
+                                {row.content || ""}
+                              </p>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-gray-500 text-center py-4 text-sm">
+                          No comments yet
+                        </p>
+                      )}
+                      <div ref={commentsEndRef} />
+                    </div>
 
-                {/* Add Comment */}
-                {canComment() && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      placeholder="Add a comment..."
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      onKeyPress={(e) =>
-                        e.key === "Enter" && handleAddComment()
-                      }
-                    />
-                    <Button
-                      onClick={handleAddComment}
-                      disabled={!newComment.trim() || commentsLoading}
-                      className="px-4 py-2"
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
+                    {canComment() && (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          placeholder="Add a comment..."
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && handleAddComment()
+                          }
+                        />
+                        <Button
+                          onClick={handleAddComment}
+                          disabled={!newComment.trim() || commentSubmitting}
+                          className="px-4 py-2"
+                        >
+                          <Send className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
+              />
             </div>
           ) : null}
         </div>

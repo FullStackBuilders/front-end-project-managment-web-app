@@ -20,13 +20,13 @@ const COLUMN_DEFINITIONS = [
   { id: 'createdBy',    label: 'Created By',     defaultVisible: true  },
   { id: 'dueDate',      label: 'Due Date',       defaultVisible: true  },
   { id: 'description',  label: 'Description',    defaultVisible: true  },
-  { id: 'lastEditedBy', label: 'Last Edited By', defaultVisible: false },
-  { id: 'lastEditedAt', label: 'Last Edited At', defaultVisible: false },
+  { id: 'lastUpdatedBy', label: 'Last Updated By', defaultVisible: false },
+  { id: 'lastUpdatedAt', label: 'Last Updated At', defaultVisible: false },
   { id: 'assignedBy',   label: 'Assigned By',    defaultVisible: false },
 ];
 
 const PRIORITY_ORDER = { HIGH: 1, MEDIUM: 2, LOW: 3 };
-const SORT_DEFAULT_DIR = { lastEditedAt: 'desc' };
+const SORT_DEFAULT_DIR = { lastUpdatedAt: 'desc' };
 
 const getSortValue = (issue, col) => {
   switch (col) {
@@ -37,9 +37,9 @@ const getSortValue = (issue, col) => {
     case 'dueDate':      return issue.dueDate
                            ? new Date(issue.dueDate + 'T00:00:00').getTime()
                            : Infinity;
-    case 'lastEditedBy': return (issue.lastEditedByName || '').toLowerCase();
-    case 'lastEditedAt': return issue.lastEditedAt
-                           ? new Date(issue.lastEditedAt).getTime()
+    case 'lastUpdatedBy': return (issue.lastUpdatedByName || '').toLowerCase();
+    case 'lastUpdatedAt': return issue.lastUpdatedAt
+                           ? new Date(issue.lastUpdatedAt).getTime()
                            : 0;
     case 'assignedBy':   return (issue.assignedByName || '').toLowerCase();
     default: return '';
@@ -144,6 +144,26 @@ function TruncatedCell({
   );
 }
 
+function loadVisibleColumnsFromStorage(projectId, defaultColumns) {
+  try {
+    const raw = localStorage.getItem(`teamboard_list_cols_${projectId}`);
+    if (!raw) return defaultColumns;
+    const parsed = JSON.parse(raw);
+    const merged = { ...defaultColumns, ...parsed };
+    if (Object.prototype.hasOwnProperty.call(parsed, 'lastEditedBy') && !Object.prototype.hasOwnProperty.call(parsed, 'lastUpdatedBy')) {
+      merged.lastUpdatedBy = parsed.lastEditedBy;
+    }
+    if (Object.prototype.hasOwnProperty.call(parsed, 'lastEditedAt') && !Object.prototype.hasOwnProperty.call(parsed, 'lastUpdatedAt')) {
+      merged.lastUpdatedAt = parsed.lastEditedAt;
+    }
+    delete merged.lastEditedBy;
+    delete merged.lastEditedAt;
+    return merged;
+  } catch {
+    return defaultColumns;
+  }
+}
+
 export default function IssueListView({ projectId }) {
   const dispatch = useDispatch();
   const { isCreator, isProjectOwner, canUpdateIssueStatus } = useAuth();
@@ -163,13 +183,7 @@ export default function IssueListView({ projectId }) {
     const defaultColumns = Object.fromEntries(
       COLUMN_DEFINITIONS.map((c) => [c.id, c.defaultVisible])
     );
-    try {
-      const saved = localStorage.getItem(`teamboard_list_cols_${projectId}`);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      return defaultColumns;
-    }
-    return defaultColumns;
+    return loadVisibleColumnsFromStorage(projectId, defaultColumns);
   });
   const [colsOpen, setColsOpen] = useState(false);
 
@@ -367,20 +381,20 @@ export default function IssueListView({ projectId }) {
                   </th>
                 )}
                 {col('description') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Description</th>}
-                {col('lastEditedBy') && (
+                {col('lastUpdatedBy') && (
                   <th
-                    onClick={() => toggleSort('lastEditedBy')}
+                    onClick={() => toggleSort('lastUpdatedBy')}
                     className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
                   >
-                    <span className="flex items-center gap-1">Last Edited By <SortIcon col="lastEditedBy" sortCol={sortCol} sortDir={sortDir} /></span>
+                    <span className="flex items-center gap-1">Last Updated By <SortIcon col="lastUpdatedBy" sortCol={sortCol} sortDir={sortDir} /></span>
                   </th>
                 )}
-                {col('lastEditedAt') && (
+                {col('lastUpdatedAt') && (
                   <th
-                    onClick={() => toggleSort('lastEditedAt')}
+                    onClick={() => toggleSort('lastUpdatedAt')}
                     className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
                   >
-                    <span className="flex items-center gap-1">Last Edited At <SortIcon col="lastEditedAt" sortCol={sortCol} sortDir={sortDir} /></span>
+                    <span className="flex items-center gap-1">Last Updated At <SortIcon col="lastUpdatedAt" sortCol={sortCol} sortDir={sortDir} /></span>
                   </th>
                 )}
                 {col('assignedBy') && (
@@ -486,21 +500,21 @@ export default function IssueListView({ projectId }) {
                       </td>
                     )}
 
-                    {col('lastEditedBy') && (
+                    {col('lastUpdatedBy') && (
                       <td className="px-3 py-3 whitespace-nowrap">
                         <TruncatedCell
-                          value={issue.lastEditedByName || null}
+                          value={issue.lastUpdatedByName || null}
                           issueId={issue.id}
-                          field="lastEditedByName"
+                          field="lastUpdatedByName"
                           expandedCell={expandedCell}
                           setExpandedCell={setExpandedCell}
                         />
                       </td>
                     )}
 
-                    {col('lastEditedAt') && (
+                    {col('lastUpdatedAt') && (
                       <td className="px-3 py-3 whitespace-nowrap text-gray-500 text-xs">
-                        {formatSmartTimestamp(issue.lastEditedAt) || '—'}
+                        {formatSmartTimestamp(issue.lastUpdatedAt) || '—'}
                       </td>
                     )}
 

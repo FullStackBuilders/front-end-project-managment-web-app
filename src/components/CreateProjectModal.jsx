@@ -1,9 +1,15 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
+import { X, ArrowLeft } from 'lucide-react';
 import { projectApi } from '../services/projectApi';
 
-export default function CreateProjectModal({ showModal, setShowModal, onProjectCreated }) {
+export default function CreateProjectModal({
+  showModal,
+  setShowModal,
+  onProjectCreated,
+  framework,
+  onBackToTemplate,
+}) {
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -12,6 +18,8 @@ export default function CreateProjectModal({ showModal, setShowModal, onProjectC
   const [tagWarning, setTagWarning] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+
+  const frameworkLabel = framework === 'SCRUM' ? 'SCRUM' : 'KANBAN';
 
   const addTag = () => {
     const trimmedTag = currentTag.trim();
@@ -48,12 +56,16 @@ export default function CreateProjectModal({ showModal, setShowModal, onProjectC
     setError('');
   };
 
+  const handleClose = () => {
+    setShowModal(false);
+    resetForm();
+  };
+
   const handleCreateProject = async (e) => {
     e.preventDefault();
     setCreating(true);
     setError('');
     
-    // Validate category is not empty or just whitespace/tabs
     const trimmedCategory = category.replace(/[\s\t]+/g, ' ').trim();
     if (!trimmedCategory) {
       setError('Category cannot be empty or contain only spaces/tabs');
@@ -67,9 +79,9 @@ export default function CreateProjectModal({ showModal, setShowModal, onProjectC
         description,
         category: trimmedCategory,
         tags,
+        framework,
       });
-      setShowModal(false);
-      resetForm();
+      handleClose();
       if (onProjectCreated) onProjectCreated();
     } catch (err) {
       setError(err.message || 'Failed to create project');
@@ -83,18 +95,37 @@ export default function CreateProjectModal({ showModal, setShowModal, onProjectC
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Create New Project</h2>
-          <button
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            onClick={() => {
-              setShowModal(false);
-              resetForm();
-            }}
-          >
-            <X size={20} />
-          </button>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <h2 className="text-xl font-bold text-gray-900">Create New Project</h2>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-gray-800">
+              {frameworkLabel}
+            </span>
+            <button
+              className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-md"
+              onClick={handleClose}
+              type="button"
+              aria-label="Close"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
+
+        {onBackToTemplate && (
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              onBackToTemplate();
+            }}
+            className="mb-4 flex items-center gap-1 text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary rounded"
+          >
+            <ArrowLeft size={16} />
+            Back to templates
+          </button>
+        )}
+
         <form onSubmit={handleCreateProject} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Project Name *</label>
@@ -191,10 +222,7 @@ export default function CreateProjectModal({ showModal, setShowModal, onProjectC
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                setShowModal(false);
-                resetForm();
-              }}
+              onClick={handleClose}
               disabled={creating}
             >
               Cancel

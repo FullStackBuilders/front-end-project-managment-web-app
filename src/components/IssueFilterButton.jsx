@@ -2,7 +2,12 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Filter } from 'lucide-react';
 import { setFilters, clearFilters } from '../store/issueSlice';
-import { INITIAL_FILTERS, countActiveFilters } from '../utils/issueFilters';
+import {
+  INITIAL_FILTERS,
+  countActiveFilters,
+  SCRUM_BOARD_SPRINT_ALL,
+} from '../utils/issueFilters';
+import SprintSelectPopoverField from './SprintSelectPopoverField';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -57,9 +62,10 @@ function PillButton({ active, onClick, children }) {
  * Follows the identical outside-click + ref pattern used by the Columns button
  * in IssueListView.jsx.
  *
- * @param {'board'|'list'|'calendar'} view - controls which filter sections appear
+ * @param {'board'|'scrumBoard'|'list'|'calendar'} view - controls which filter sections appear
+ * @param {{ id: number; name: string }[]} [sprintFilterOptions] - ACTIVE sprints for scrum board sprint row (top of panel)
  */
-export default function IssueFilterButton({ view, align = 'end' }) {
+export default function IssueFilterButton({ view, align = 'end', sprintFilterOptions }) {
   const dispatch = useDispatch();
   const activeFilterCount = useSelector((state) =>
     countActiveFilters(state.issues.filtersByView[view])
@@ -70,16 +76,23 @@ export default function IssueFilterButton({ view, align = 'end' }) {
   const [pending, setPending] = useState({ ...INITIAL_FILTERS });
   const panelRef = useRef(null);
 
-  const showAssignedToMe = view === 'board' || view === 'list';
+  const showAssignedToMe =
+    view === 'board' || view === 'scrumBoard' || view === 'list';
   const showStatus       = view === 'list'  || view === 'calendar';
 
   // Sync pending state from Redux whenever the panel opens
   useEffect(() => {
     if (open) {
+      const defaultSprint =
+        view === 'scrumBoard' ? SCRUM_BOARD_SPRINT_ALL : null;
       setPending({
         ...reduxFilters,
         priorities: [...reduxFilters.priorities],
-        statuses:   [...reduxFilters.statuses],
+        statuses: [...reduxFilters.statuses],
+        sprintId:
+          reduxFilters.sprintId === undefined || reduxFilters.sprintId === null
+            ? defaultSprint
+            : reduxFilters.sprintId,
       });
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -164,7 +177,12 @@ export default function IssueFilterButton({ view, align = 'end' }) {
 
   const handleClearAll = () => {
     dispatch(clearFilters({ view }));
-    setPending({ ...INITIAL_FILTERS });
+    setPending({
+      ...INITIAL_FILTERS,
+      ...(view === 'scrumBoard'
+        ? { sprintId: SCRUM_BOARD_SPRINT_ALL }
+        : {}),
+    });
     setOpen(false);
   };
 
@@ -209,6 +227,30 @@ export default function IssueFilterButton({ view, align = 'end' }) {
           </div>
 
           <div className="px-5 py-4 space-y-5">
+
+            {/* ── Sprint (Scrum board — SectionLabel matches Assigned to / Priority) ─ */}
+            {view === 'scrumBoard' &&
+              sprintFilterOptions &&
+              sprintFilterOptions.length > 0 && (
+                <div>
+                  <label
+                    htmlFor="issue-filter-scrum-sprint-trigger"
+                    className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 cursor-pointer"
+                  >
+                    Sprint
+                  </label>
+                  <SprintSelectPopoverField
+                    showLabel={false}
+                    options={sprintFilterOptions}
+                    value={pending.sprintId ?? null}
+                    onChange={(id) =>
+                      setPending((prev) => ({ ...prev, sprintId: id }))
+                    }
+                    triggerId="issue-filter-scrum-sprint-trigger"
+                    rootClassName="mb-0"
+                  />
+                </div>
+              )}
 
             {/* ── Assigned to Me (Board + List only) ─────────────────────── */}
             {showAssignedToMe && (

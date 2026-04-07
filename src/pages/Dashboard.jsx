@@ -8,6 +8,7 @@ import Header from "../components/Header";
 import FilterPanel from "../components/FilterPanel";
 import ProjectCard from "../components/ProjectCard";
 import CreateProjectModal from "@/components/CreateProjectModal";
+import ScrumProjectTemplateModal from "@/components/scrum/ScrumProjectTemplateModal";
 import SearchBar from "../components/SearchBar";
 import ProjectJoinSuccessModal from "../components/ProjectJoinSuccessModal";
 import ProjectJoinFailedModal from "../components/ProjectJoinFailedModal";
@@ -29,7 +30,11 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [showModal, setShowModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedFramework, setSelectedFramework] = useState(null);
+
+  const openCreateProjectFlow = () => setShowTemplateModal(true);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [joinedProjectName, setJoinedProjectName] = useState("");
@@ -272,7 +277,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header onProjectCreated={handleProjectCreated} />
+        <Header />
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
@@ -286,7 +291,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header onProjectCreated={handleProjectCreated} />
+        <Header />
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <p className="text-red-600 mb-4">{error}</p>
@@ -300,10 +305,7 @@ export default function Dashboard() {
   if (projects.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header
-          onProjectCreated={handleProjectCreated}
-          setShowModal={setShowModal}
-        />
+        <Header />
         <div className="flex flex-col items-center justify-center h-96">
           <div className="mb-6 text-center">
             <FolderOpen size={64} className="text-gray-300 mx-auto mb-4" />
@@ -316,7 +318,7 @@ export default function Dashboard() {
             </p>
           </div>
           <Button
-            onClick={() => setShowModal(true)}
+            onClick={openCreateProjectFlow}
             className="flex items-center gap-2"
             size="lg"
           >
@@ -324,11 +326,31 @@ export default function Dashboard() {
             Create Your First Project
           </Button>
         </div>
-        {showModal && (
+        <ScrumProjectTemplateModal
+          open={showTemplateModal}
+          onClose={() => setShowTemplateModal(false)}
+          onSelectFramework={(fw) => {
+            setSelectedFramework(fw);
+            setShowTemplateModal(false);
+            setShowCreateModal(true);
+          }}
+        />
+        {showCreateModal && selectedFramework && (
           <CreateProjectModal
-            showModal={showModal}
-            setShowModal={setShowModal}
+            showModal={showCreateModal}
+            setShowModal={(open) => {
+              if (!open) {
+                setShowCreateModal(false);
+                setSelectedFramework(null);
+              }
+            }}
             onProjectCreated={handleProjectCreated}
+            framework={selectedFramework}
+            onBackToTemplate={() => {
+              setShowCreateModal(false);
+              setSelectedFramework(null);
+              setShowTemplateModal(true);
+            }}
           />
         )}
         <ProjectJoinSuccessModal
@@ -373,7 +395,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 <Button
-                  onClick={() => setShowModal(true)}
+                  onClick={openCreateProjectFlow}
                   className="flex items-center gap-2"
                 >
                   <Plus size={16} />
@@ -457,11 +479,31 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-      {showModal && (
+      <ScrumProjectTemplateModal
+        open={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onSelectFramework={(fw) => {
+          setSelectedFramework(fw);
+          setShowTemplateModal(false);
+          setShowCreateModal(true);
+        }}
+      />
+      {showCreateModal && selectedFramework && (
         <CreateProjectModal
-          showModal={showModal}
-          setShowModal={setShowModal}
+          showModal={showCreateModal}
+          setShowModal={(open) => {
+            if (!open) {
+              setShowCreateModal(false);
+              setSelectedFramework(null);
+            }
+          }}
           onProjectCreated={handleProjectCreated}
+          framework={selectedFramework}
+          onBackToTemplate={() => {
+            setShowCreateModal(false);
+            setSelectedFramework(null);
+            setShowTemplateModal(true);
+          }}
         />
       )}
       <ProjectJoinSuccessModal

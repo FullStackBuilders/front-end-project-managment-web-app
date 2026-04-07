@@ -94,11 +94,16 @@ export default function ProjectCard({ project, onDelete, currentUserId }) {
           </p>
         </div>
 
-        {/* Category */}
-        <div className="mb-4">
+        {/* Category + framework */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
             {project.category}
           </span>
+          {project.framework && (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+              {project.framework}
+            </span>
+          )}
         </div>
 
         {/* Tags */}

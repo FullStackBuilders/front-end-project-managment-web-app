@@ -79,6 +79,13 @@ class ApiService {
     });
   }
 
+  async patch(endpoint, data = null) {
+    return this.authenticatedRequest(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : null,
+    });
+  }
+
   async delete(endpoint) {
     return this.authenticatedRequest(endpoint, { method: 'DELETE' });
   }

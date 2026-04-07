@@ -1,6 +1,11 @@
 import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
 import { isToday, isThisWeek, isThisMonth, parseISO } from 'date-fns';
-import { INITIAL_FILTERS, applyFilters, countActiveFilters } from '../utils/issueFilters';
+import {
+  INITIAL_FILTERS,
+  applyFilters,
+  countActiveFilters,
+  SCRUM_BOARD_SPRINT_ALL,
+} from '../utils/issueFilters';
 import AuthService from '../services/AuthService';
 import { issueApi } from '../services/issueApi';
 
@@ -94,10 +99,25 @@ export const clearAssignee = createAsyncThunk(
   }
 );
 
+export const assignIssueSprint = createAsyncThunk(
+  'issues/assignSprint',
+  async ({ issueId, sprintId }, { rejectWithValue }) => {
+    try {
+      const response = await issueApi.assignIssueSprint(issueId, sprintId);
+      return response;
+    } catch (error) {
+      return rejectWithValue(
+        error?.message || (typeof error === 'string' ? error : 'Failed to move task'),
+      );
+    }
+  }
+);
+
 const makeInitialFiltersByView = () => ({
-  board:    { ...INITIAL_FILTERS },
-  list:     { ...INITIAL_FILTERS },
-  calendar: { ...INITIAL_FILTERS },
+  board:      { ...INITIAL_FILTERS },
+  scrumBoard: { ...INITIAL_FILTERS, sprintId: SCRUM_BOARD_SPRINT_ALL },
+  list:       { ...INITIAL_FILTERS },
+  calendar:   { ...INITIAL_FILTERS },
 });
 
 const issueSlice = createSlice({
@@ -142,7 +162,31 @@ const issueSlice = createSlice({
     },
     // Reset filters for a specific view — payload: { view }
     clearFilters: (state, action) => {
-      state.filtersByView[action.payload.view] = { ...INITIAL_FILTERS };
+      const view = action.payload.view;
+      if (view === 'scrumBoard') {
+        state.filtersByView.scrumBoard = {
+          ...INITIAL_FILTERS,
+          sprintId: SCRUM_BOARD_SPRINT_ALL,
+        };
+      } else {
+        state.filtersByView[view] = { ...INITIAL_FILTERS };
+      }
+    },
+    assignSprintOptimistic: (state, action) => {
+      const { issueId, sprintId, sprintName } = action.payload;
+      const issue = state.issues.find((i) => i.id === issueId);
+      if (issue) {
+        issue.sprintId = sprintId;
+        issue.sprintName = sprintName ?? null;
+      }
+    },
+    rollbackAssignSprint: (state, action) => {
+      const { issueId, sprintId, sprintName } = action.payload;
+      const issue = state.issues.find((i) => i.id === issueId);
+      if (issue) {
+        issue.sprintId = sprintId;
+        issue.sprintName = sprintName ?? null;
+      }
     },
   },
   extraReducers: (builder) => {
@@ -231,6 +275,20 @@ const issueSlice = createSlice({
       })
       .addCase(clearAssignee.rejected, (state, action) => {
         state.error = action.payload;
+      })
+
+      .addCase(assignIssueSprint.fulfilled, (state, action) => {
+        const updated = action.payload;
+        if (!updated?.id) return;
+        const index = state.issues.findIndex((issue) => issue.id === updated.id);
+        if (index !== -1) {
+          state.issues[index] = updated;
+        } else {
+          state.issues.push(updated);
+        }
+      })
+      .addCase(assignIssueSprint.rejected, (_state, _action) => {
+        // Handled in UI with rollback + ErrorModal
       });
   },
 });
@@ -242,6 +300,8 @@ export const {
   rollbackIssueMove,
   setFilters,
   clearFilters,
+  assignSprintOptimistic,
+  rollbackAssignSprint,
 } = issueSlice.actions;
 
 export default issueSlice.reducer;

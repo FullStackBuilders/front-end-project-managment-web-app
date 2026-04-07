@@ -13,6 +13,8 @@ export default function FormSelectPopover({
   triggerContent,
   children,
   disabled = false,
+  /** Override root wrapper spacing (e.g. `mb-0` when nested in another panel). */
+  rootClassName = 'mb-4',
 }) {
   const rootRef = useRef(null);
 
@@ -40,7 +42,7 @@ export default function FormSelectPopover({
   }, [open, handleOutside, onOpenChange]);
 
   return (
-    <div className="mb-4" ref={rootRef}>
+    <div className={rootClassName} ref={rootRef}>
       {label && (
         <label htmlFor={triggerId} className="block text-sm font-medium text-gray-700 mb-1">
           {label}
