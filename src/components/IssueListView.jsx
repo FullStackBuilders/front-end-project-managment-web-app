@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Plus, Flag, SlidersHorizontal, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatSmartTimestamp } from '../utils/dateUtils';
+import { isIssueOverdue } from '../utils/issueDue';
 import { useAuth } from '../context/AuthContext';
 import { deleteIssue, selectListFilteredIssues } from '../store/issueSlice';
 import CreateIssueModal from './CreateIssueModal';
@@ -245,11 +246,6 @@ export default function IssueListView({ projectId }) {
     [issues, canOpenEditModal]
   );
 
-  const isOverdue = (issue) =>
-    issue.dueDate &&
-    issue.status !== 'DONE' &&
-    new Date(issue.dueDate + 'T00:00:00') < new Date();
-
   const toggleSort = (col) => {
     if (sortCol === col) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -412,7 +408,7 @@ export default function IssueListView({ projectId }) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {sortedIssues.map((issue) => {
-                const overdue = isOverdue(issue);
+                const overdue = isIssueOverdue(issue);
                 const rowBg = overdue ? 'bg-red-50' : 'bg-white';
 
                 return (

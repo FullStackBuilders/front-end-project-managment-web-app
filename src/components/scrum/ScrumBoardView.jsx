@@ -8,8 +8,8 @@ import AuthService from "@/services/AuthService";
 import { setFilters } from "@/store/issueSlice";
 
 /**
- * Scrum Kanban: default sprint filter is "All" (every ACTIVE sprint). Scope lives in Redux
- * `filtersByView.scrumBoard.sprintId` (`'all'` | sprint id). Active sprints follow API list order.
+ * Scrum Kanban: sprint filter in Redux `filtersByView.scrumBoard.sprintId` (`'all'` | sprint id).
+ * With multiple ACTIVE sprints, "All" is offered; with exactly one, selection defaults to that sprint (no "All").
  *
  * @param {object} props
  * @param {string|number} props.projectId
@@ -55,19 +55,45 @@ export default function ScrumBoardView({ projectId }) {
     [activeSprintsInApiOrder],
   );
 
-  const sprintFilterOptions = useMemo(
-    () => [
-      { id: SCRUM_BOARD_SPRINT_ALL, name: "All" },
-      ...activeSprintsInApiOrder.map((s) => ({
-        id: Number(s.id),
-        name: s.name,
-      })),
-    ],
-    [activeSprintsInApiOrder],
-  );
+  const sprintFilterOptions = useMemo(() => {
+    const rows = activeSprintsInApiOrder.map((s) => ({
+      id: Number(s.id),
+      name: s.name,
+    }));
+    if (activeSprintsInApiOrder.length <= 1) {
+      return rows;
+    }
+    return [{ id: SCRUM_BOARD_SPRINT_ALL, name: "All" }, ...rows];
+  }, [activeSprintsInApiOrder]);
 
   useEffect(() => {
     if (sprintsLoading || activeSprintsInApiOrder.length === 0) return;
+
+    const n = activeSprintsInApiOrder.length;
+    const onlySprintId =
+      n === 1 ? Number(activeSprintsInApiOrder[0].id) : null;
+
+    if (n === 1 && onlySprintId != null) {
+      const cur = scrumFilters.sprintId;
+      const curNum =
+        cur !== SCRUM_BOARD_SPRINT_ALL && cur != null ? Number(cur) : null;
+      const needsFix =
+        cur === SCRUM_BOARD_SPRINT_ALL ||
+        cur == null ||
+        cur === undefined ||
+        curNum == null ||
+        !activeIds.has(curNum) ||
+        curNum !== onlySprintId;
+      if (needsFix) {
+        dispatch(
+          setFilters({
+            view: "scrumBoard",
+            filters: { ...scrumFilters, sprintId: onlySprintId },
+          }),
+        );
+      }
+      return;
+    }
 
     const sid = scrumFilters.sprintId;
     if (sid === SCRUM_BOARD_SPRINT_ALL) return;
@@ -88,13 +114,7 @@ export default function ScrumBoardView({ projectId }) {
         }),
       );
     }
-  }, [
-    sprintsLoading,
-    activeSprintsInApiOrder.length,
-    scrumFilters,
-    dispatch,
-    activeIds,
-  ]);
+  }, [sprintsLoading, activeSprintsInApiOrder, scrumFilters, dispatch, activeIds]);
 
   const boardReady =
     !sprintsLoading &&

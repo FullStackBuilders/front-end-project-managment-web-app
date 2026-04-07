@@ -6,6 +6,7 @@ import {
   countActiveFilters,
   SCRUM_BOARD_SPRINT_ALL,
 } from '../utils/issueFilters';
+import { isIssueOverdue } from '../utils/issueDue';
 import AuthService from '../services/AuthService';
 import { issueApi } from '../services/issueApi';
 
@@ -162,11 +163,15 @@ const issueSlice = createSlice({
     },
     // Reset filters for a specific view — payload: { view }
     clearFilters: (state, action) => {
-      const view = action.payload.view;
+      const { view, defaultScrumSprintId } = action.payload;
       if (view === 'scrumBoard') {
+        const sprintId =
+          defaultScrumSprintId !== undefined && defaultScrumSprintId !== null
+            ? defaultScrumSprintId
+            : SCRUM_BOARD_SPRINT_ALL;
         state.filtersByView.scrumBoard = {
           ...INITIAL_FILTERS,
-          sprintId: SCRUM_BOARD_SPRINT_ALL,
+          sprintId,
         };
       } else {
         state.filtersByView[view] = { ...INITIAL_FILTERS };
@@ -193,9 +198,16 @@ const issueSlice = createSlice({
     builder
       // Fetch issues
       .addCase(fetchIssuesByProject.pending, (state, action) => {
-        state.loading = true;
+        const projectId = action.meta.arg;
+        // Refetch for the same project must not flip global loading — ManageProject uses
+        // issuesLoading to show a full-page spinner, which unmounts ScrumProjectWorkspace and
+        // drops tab state (e.g. switching to Board after Start sprint).
+        const isSameProjectRefetch = state.currentProjectId === projectId;
         state.error = null;
-        state.currentProjectId = action.meta.arg; // Store the project ID being fetched
+        if (!isSameProjectRefetch) {
+          state.loading = true;
+        }
+        state.currentProjectId = projectId;
       })
       .addCase(fetchIssuesByProject.fulfilled, (state, action) => {
         state.loading = false;
@@ -332,15 +344,10 @@ export const selectAllIssuesRaw = selectAllIssues;
 export const selectAnalyticsSummary = createSelector(
   [selectAllIssues],
   (issues) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     const total      = issues.length;
     const completed  = issues.filter((i) => i.status === 'DONE').length;
     const inProgress = issues.filter((i) => i.status === 'IN_PROGRESS').length;
-    const overdue    = issues.filter(
-      (i) => i.dueDate && new Date(i.dueDate) < today && i.status !== 'DONE'
-    ).length;
+    const overdue    = issues.filter((i) => isIssueOverdue(i)).length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     return { total, completed, inProgress, overdue, completionRate };

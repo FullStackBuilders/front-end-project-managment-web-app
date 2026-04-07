@@ -100,13 +100,14 @@ export default function SprintLifecycleModal({
   const secondaryLabel = "Cancel";
 
   if (variant === "start_overdue") {
-    title = "Sprint duration has already passed";
+    title = "Start Sprint?";
     const endDisabled = durationMode !== "custom";
     body = (
       <div className="space-y-3 text-sm text-gray-700">
         <p>
-          This sprint has {incompleteCount} incomplete task
-          {incompleteCount !== 1 ? "s" : ""}.
+          This sprint includes{" "}
+          <span className="font-semibold">{tasks.length}</span> task
+          {tasks.length !== 1 ? "s" : ""}.
         </p>
         <p className="text-gray-600">
           You must update the sprint dates before starting.
@@ -154,12 +155,19 @@ export default function SprintLifecycleModal({
   }
 
   if (variant === "complete_all_done") {
-    title = timeboxEnded ? "Sprint duration has ended" : "Complete sprint?";
+    title = sprintName?.trim()
+      ? `Complete ${sprintName.trim()}`
+      : "Complete sprint";
+    const emptySprint = tasks.length === 0;
     body = (
       <div className="space-y-2 text-sm text-gray-700">
         {timeboxEnded && <p>Sprint duration has ended.</p>}
         <p>
-          All tasks in{sprintName ? ` “${sprintName}”` : " this sprint"} are completed.
+          {emptySprint
+            ? "There are no tasks in this sprint."
+            : `Congratulations! All tasks in ${
+                sprintName ? `'${sprintName}'` : "this sprint"
+              } are completed.`}
         </p>
       </div>
     );
@@ -169,21 +177,21 @@ export default function SprintLifecycleModal({
   }
 
   if (variant === "complete_mixed") {
-    title = timeboxEnded ? "Sprint duration has ended" : "Complete sprint?";
+    title = sprintName?.trim()
+      ? `Complete ${sprintName.trim()}`
+      : "Complete sprint";
     body = (
       <div className="space-y-2 text-sm text-gray-700">
         {timeboxEnded && <p>Sprint duration has ended.</p>}
-        <p>This sprint has:</p>
-        <ul className="list-disc list-inside space-y-0.5 text-gray-800">
-          <li>
-            {completedCount} completed task{completedCount !== 1 ? "s" : ""}
-          </li>
-          <li>
-            {incompleteCount} incomplete task{incompleteCount !== 1 ? "s" : ""}
-          </li>
-        </ul>
+        <p>
+          This sprint has{" "}
+          <span className="font-semibold">{completedCount}</span> completed task
+          {completedCount !== 1 ? "s" : ""} and{" "}
+          <span className="font-semibold">{incompleteCount}</span> incomplete task
+          {incompleteCount !== 1 ? "s" : ""}.
+        </p>
         <p className="text-gray-600">
-          Incomplete tasks will be moved back to backlog when you complete this sprint.
+          Incomplete tasks will be moved to the backlog when you complete this sprint.
         </p>
       </div>
     );

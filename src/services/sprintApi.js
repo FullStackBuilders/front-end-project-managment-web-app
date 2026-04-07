@@ -27,6 +27,24 @@ export const sprintApi = {
   /**
    * @param {string|number} projectId
    * @param {number} sprintId
+   * @param {{ name: string; goal?: string | null; startDate: string; endDate: string }} body
+   */
+  update: async (projectId, sprintId, body) => {
+    try {
+      const response = await ApiService.put(
+        `/api/projects/${projectId}/sprints/${sprintId}`,
+        body,
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error updating sprint:", error);
+      throw new Error(error.message || "Failed to update sprint");
+    }
+  },
+
+  /**
+   * @param {string|number} projectId
+   * @param {number} sprintId
    * @param {{ startDate: string; endDate: string } | null} [body] - required when sprint end date is in the past
    */
   start: async (projectId, sprintId, body = null) => {

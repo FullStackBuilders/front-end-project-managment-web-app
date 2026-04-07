@@ -7,6 +7,7 @@ import AuthService from '../services/AuthService';
 import TaskFormPriorityField from './TaskFormPriorityField';
 import TaskFormStatusField from './TaskFormStatusField';
 import TaskFormAssigneeField from './TaskFormAssigneeField';
+import StatusBadge from './StatusBadge';
 import { assigneeIdStringFromIssue, UNASSIGNED } from '../constants/assigneeForm';
 import { normalizeTitleForCompare } from '../utils/taskFormNormalization';
 import {
@@ -15,7 +16,16 @@ import {
   persistTaskEdits,
 } from '../utils/persistTaskEdit';
 
-export default function EditTaskModal({ showModal, onClose, issue, projectMembers = [] }) {
+/**
+ * @param {'default'|'scrum_backlog_badge'|'scrum_active_sprint'} [statusFieldVariant] - Scrum only; omit for Kanban (full status edit).
+ */
+export default function EditTaskModal({
+  showModal,
+  onClose,
+  issue,
+  projectMembers = [],
+  statusFieldVariant = 'default',
+}) {
   const dispatch = useDispatch();
   const { isCreator, isProjectOwner, canUpdateIssueStatus } = useAuth();
 
@@ -41,21 +51,25 @@ export default function EditTaskModal({ showModal, onClose, issue, projectMember
     return canUpdateIssueStatus(issue);
   }, [issue, canEditFullDetails, canUpdateIssueStatus]);
 
+  const statusEditable = statusFieldVariant !== 'scrum_backlog_badge';
+
   useEffect(() => {
     if (!showModal || !issue) return;
     const b = buildEditBaselineFromIssue(issue);
     setBaseline(b);
+    const statusValue =
+      statusFieldVariant === 'scrum_backlog_badge' ? 'TO_DO' : issue.status || 'TO_DO';
     setFormData({
       title: issue.title || '',
       description: issue.description ?? '',
       priority: issue.priority || 'MEDIUM',
       dueDate: issue.dueDate ? issue.dueDate.split('T')[0] : '',
-      status: issue.status || 'TO_DO',
+      status: statusValue,
       assigneeId: assigneeIdStringFromIssue(issue),
     });
     setError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- baseline when opening modal; avoid Redux reference churn
-  }, [showModal, issue?.id]);
+  }, [showModal, issue?.id, statusFieldVariant]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -67,8 +81,8 @@ export default function EditTaskModal({ showModal, onClose, issue, projectMember
     if (!baseline) {
       return { statusChanged: false, nonStatusFieldsChanged: false };
     }
-    return computeTaskEditDelta(formData, baseline, canEditFullDetails);
-  }, [formData, baseline, canEditFullDetails]);
+    return computeTaskEditDelta(formData, baseline, canEditFullDetails, { statusEditable });
+  }, [formData, baseline, canEditFullDetails, statusEditable]);
 
   const titleValid = normalizeTitleForCompare(formData.title).length > 0;
 
@@ -93,6 +107,7 @@ export default function EditTaskModal({ showModal, onClose, issue, projectMember
         formData,
         baseline,
         canEditFullDetails,
+        statusEditable,
       });
       onClose();
     } catch (err) {
@@ -127,7 +142,7 @@ export default function EditTaskModal({ showModal, onClose, issue, projectMember
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
-          {isAssigneeOnlyEditor && (
+          {isAssigneeOnlyEditor && statusEditable && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex gap-2 text-sm text-amber-900">
               <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />
               <p>You can only change the status of this task.</p>
@@ -183,13 +198,22 @@ export default function EditTaskModal({ showModal, onClose, issue, projectMember
             }}
           />
 
-          <TaskFormStatusField
-            value={formData.status}
-            onChange={(status) => {
-              setFormData((prev) => ({ ...prev, status }));
-              if (error) setError('');
-            }}
-          />
+          {statusFieldVariant === 'scrum_backlog_badge' ? (
+            <div className="mb-4">
+              <span className="block text-sm font-medium text-gray-700 mb-1">Status</span>
+              <div className="flex items-center min-h-[40px]">
+                <StatusBadge status="TO_DO" />
+              </div>
+            </div>
+          ) : (
+            <TaskFormStatusField
+              value={formData.status}
+              onChange={(status) => {
+                setFormData((prev) => ({ ...prev, status }));
+                if (error) setError('');
+              }}
+            />
+          )}
 
           {canEditFullDetails && projectMembers.length > 0 && (
             <TaskFormAssigneeField

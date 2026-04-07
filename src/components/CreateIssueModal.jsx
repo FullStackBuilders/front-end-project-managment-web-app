@@ -6,6 +6,7 @@ import { createIssue } from '../store/issueSlice';
 import AuthService from '../services/AuthService';
 import TaskFormPriorityField from './TaskFormPriorityField';
 import TaskFormAssigneeField from './TaskFormAssigneeField';
+import StatusBadge from './StatusBadge';
 import { assigneeIdToCreateApiPayload, UNASSIGNED } from '../constants/assigneeForm';
 import { normalizeTitleForCompare } from '../utils/taskFormNormalization';
 
@@ -145,6 +146,13 @@ export default function CreateIssueModal({ showModal, setShowModal, projectId, p
               if (error) setError('');
             }}
           />
+
+          <div className="mb-4">
+            <span className="block text-sm font-medium text-gray-700 mb-1">Status</span>
+            <div className="flex items-center min-h-[40px]">
+              <StatusBadge status="TO_DO" />
+            </div>
+          </div>
 
           {projectMembers.length > 0 && (
             <TaskFormAssigneeField

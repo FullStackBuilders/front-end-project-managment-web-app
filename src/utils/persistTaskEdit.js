@@ -20,14 +20,17 @@ export function buildEditBaselineFromIssue(issue) {
 
 /**
  * @returns {{ statusChanged: boolean, nonStatusFieldsChanged: boolean, assigneeChanged: boolean }}
+ * @param {{ statusEditable?: boolean }} [options] - When false (Scrum backlog / INACTIVE), status never counts as changed.
  */
-export function computeTaskEditDelta(formData, baseline, canEditFullDetails) {
+export function computeTaskEditDelta(formData, baseline, canEditFullDetails, options = {}) {
+  const { statusEditable = true } = options;
   const normTitle = normalizeTitleForCompare(formData.title);
   const normDesc = normalizeDescriptionForCompare(formData.description);
   const baseTitle = normalizeTitleForCompare(baseline.title);
   const baseDesc = normalizeDescriptionForCompare(baseline.description);
 
-  const statusChanged = formData.status !== baseline.status;
+  const statusChanged =
+    statusEditable && formData.status !== baseline.status;
   const nonStatusFieldsChanged =
     !!canEditFullDetails &&
     (normTitle !== baseTitle ||
@@ -46,11 +49,15 @@ export function computeTaskEditDelta(formData, baseline, canEditFullDetails) {
  * Assignee-only: only updateIssueStatus when status changed.
  * Creator/owner: updateIssue when non-status fields changed, then updateIssueStatus, then assignee (add or clear).
  */
-export async function persistTaskEdits(dispatch, { issueId, formData, baseline, canEditFullDetails }) {
+export async function persistTaskEdits(
+  dispatch,
+  { issueId, formData, baseline, canEditFullDetails, statusEditable = true },
+) {
   const { statusChanged, nonStatusFieldsChanged, assigneeChanged } = computeTaskEditDelta(
     formData,
     baseline,
-    canEditFullDetails
+    canEditFullDetails,
+    { statusEditable },
   );
 
   if (!canEditFullDetails) {

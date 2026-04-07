@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Plus, Flag } from "lucide-react";
+import { Plus, Flag, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -16,6 +16,7 @@ import DeleteConfirmationModal from "@/components/DeleteConfirmationModal";
 import StatusBadge from "@/components/StatusBadge";
 import ErrorModal from "@/components/ErrorModal";
 import CreateSprintModal from "@/components/scrum/CreateSprintModal";
+import EditSprintModal from "@/components/scrum/EditSprintModal";
 import SprintLifecycleModal from "@/components/scrum/SprintLifecycleModal";
 import AddTasksToSprintModal from "@/components/scrum/AddTasksToSprintModal";
 import { sprintApi } from "@/services/sprintApi";
@@ -26,6 +27,7 @@ import {
   sprintDateRangeLabel,
   countSprintTasksByDone,
 } from "@/utils/scrumBacklogUtils";
+import { isIssueOverdue } from "@/utils/issueDue";
 
 const PRIORITY_COLORS = {
   HIGH: "bg-red-100 text-red-700 border-red-200",
@@ -76,13 +78,6 @@ function isIssueInCompletedSprint(issue, sprints) {
   return sp?.status === "COMPLETED";
 }
 
-function statusLabel(status) {
-  if (status === "INACTIVE") return "Planned";
-  if (status === "ACTIVE") return "Active";
-  if (status === "COMPLETED") return "Completed";
-  return status || "";
-}
-
 function BacklogSelectAllCheckbox({ checked, indeterminate, disabled, onChange }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -123,6 +118,8 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
   const [backlogConfirmSubmitting, setBacklogConfirmSubmitting] = useState(false);
 
   const [sprintSubmitting, setSprintSubmitting] = useState(false);
+  const [editingSprint, setEditingSprint] = useState(null);
+  const [editSprintSubmitting, setEditSprintSubmitting] = useState(false);
   const [modalEditIssue, setModalEditIssue] = useState(null);
   const [pendingDeleteIssue, setPendingDeleteIssue] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -165,16 +162,22 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
     [sprints],
   );
 
+  /** INACTIVE + ACTIVE only; COMPLETED sprints stay in DB but are not listed in backlog UI. */
+  const sprintsVisibleInBacklog = useMemo(
+    () => sprints.filter((s) => s.status !== "COMPLETED"),
+    [sprints],
+  );
+
   const issuesBySprintId = useMemo(() => {
     const map = new Map();
-    for (const s of sprints) {
+    for (const s of sprintsVisibleInBacklog) {
       map.set(
         s.id,
         issues.filter((i) => issueSprintId(i) === s.id),
       );
     }
     return map;
-  }, [issues, sprints]);
+  }, [issues, sprintsVisibleInBacklog]);
 
   const selectedBacklogTasks = useMemo(
     () => backlogIssues.filter((i) => selectedIds.has(i.id)),
@@ -196,6 +199,42 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
     isOwner && selectedBacklogTasks.length > 0;
   const canAddToBacklog =
     isOwner && selectedEligibleForBacklog.length > 0;
+
+  /** Single vs multi sprint; whether every task in that sprint is selected (header or row checkboxes). */
+  const backlogMoveSummary = useMemo(() => {
+    const items = selectedEligibleForBacklog;
+    const n = items.length;
+    if (n === 0) return { variant: "empty" };
+
+    const sprintIds = [
+      ...new Set(
+        items.map((i) => issueSprintId(i)).filter((id) => id != null),
+      ),
+    ];
+    if (sprintIds.length !== 1) {
+      return { variant: "multi", n };
+    }
+
+    const sid = sprintIds[0];
+    const sprint = sprints.find((s) => Number(s.id) === Number(sid));
+    const sprintName = sprint?.name ?? "Sprint";
+    const totalInSprint = issues.filter(
+      (i) =>
+        issueSprintId(i) === sid &&
+        !isIssueInCompletedSprint(i, sprints),
+    ).length;
+    const allTasksInSprintSelected =
+      totalInSprint > 0 &&
+      n === totalInSprint &&
+      items.every((i) => issueSprintId(i) === sid);
+
+    return {
+      variant: "single",
+      n,
+      sprintName,
+      allTasksInSprintSelected,
+    };
+  }, [selectedEligibleForBacklog, issues, sprints]);
 
   const allBacklogSelected =
     backlogIssues.length > 0 &&
@@ -259,9 +298,29 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
   );
 
   const canOpenEditModal = useCallback(
-    (issue) => canEditOrDelete(issue) || canUpdateIssueStatus(issue),
-    [canEditOrDelete, canUpdateIssueStatus],
+    (issue) => {
+      const can =
+        canEditOrDelete(issue) || canUpdateIssueStatus(issue);
+      if (currentProject?.framework !== "SCRUM" || !isBacklogIssue(issue)) {
+        return can;
+      }
+      if (!canEditOrDelete(issue) && canUpdateIssueStatus(issue)) {
+        return false;
+      }
+      return can;
+    },
+    [canEditOrDelete, canUpdateIssueStatus, currentProject?.framework],
   );
+
+  const scrumEditStatusFieldVariant = useMemo(() => {
+    if (!modalEditIssue) return "default";
+    const sid = issueSprintId(modalEditIssue);
+    if (sid == null) return "scrum_backlog_badge";
+    const sp = sprints.find((s) => Number(s.id) === Number(sid));
+    if (!sp) return "scrum_backlog_badge";
+    if (sp.status === "ACTIVE") return "scrum_active_sprint";
+    return "scrum_backlog_badge";
+  }, [modalEditIssue, sprints]);
 
   const showActionsColumn = useMemo(
     () => isOwner && backlogIssues.some((issue) => canOpenEditModal(issue)),
@@ -385,6 +444,19 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
     }
   };
 
+  const handleUpdateSprint = async (body) => {
+    if (!editingSprint) return;
+    setEditSprintSubmitting(true);
+    try {
+      await sprintApi.update(projectId, editingSprint.id, body);
+      await loadSprints();
+    } catch (e) {
+      throw e?.message || String(e) || "Failed to update sprint";
+    } finally {
+      setEditSprintSubmitting(false);
+    }
+  };
+
   const runStartSprint = async (sprintId, dateBody = null, { forModal = false } = {}) => {
     setStartSubmittingId(sprintId);
     try {
@@ -438,11 +510,6 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
     }
   };
 
-  const isOverdue = (issue) =>
-    issue.dueDate &&
-    issue.status !== "DONE" &&
-    new Date(issue.dueDate + "T00:00:00") < new Date();
-
   const confirmDelete = async () => {
     if (!pendingDeleteIssue) return;
     setIsDeleting(true);
@@ -462,7 +529,7 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
   };
 
   const renderIssueRowCells = (issue) => {
-    const overdue = isOverdue(issue);
+    const overdue = isIssueOverdue(issue);
     return (
       <>
         <td className="px-3 py-3 text-gray-900 max-w-xs">
@@ -545,6 +612,16 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
         submitting={sprintSubmitting}
       />
 
+      {editingSprint && (
+        <EditSprintModal
+          key={editingSprint.id}
+          sprint={editingSprint}
+          onClose={() => setEditingSprint(null)}
+          onConfirm={handleUpdateSprint}
+          submitting={editSprintSubmitting}
+        />
+      )}
+
       <AddTasksToSprintModal
         open={showAddToSprintModal}
         onClose={() => setShowAddToSprintModal(false)}
@@ -563,11 +640,30 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
               Move to backlog?
             </h2>
             <p className="text-sm text-gray-700 mb-4">
-              Move{" "}
-              <span className="font-semibold">{selectedEligibleForBacklog.length}</span>{" "}
-              task{selectedEligibleForBacklog.length !== 1 ? "s" : ""} out of{" "}
-              {selectedEligibleForBacklog.length !== 1 ? "their sprints" : "its sprint"} and into
-              the product backlog.
+              {backlogMoveSummary.variant === "single" &&
+                backlogMoveSummary.allTasksInSprintSelected && (
+                  <>
+                    Move <span className="font-semibold">All</span> tasks from{" "}
+                    <span className="font-semibold">{backlogMoveSummary.sprintName}</span> to the
+                    backlog.
+                  </>
+                )}
+              {backlogMoveSummary.variant === "single" &&
+                !backlogMoveSummary.allTasksInSprintSelected && (
+                  <>
+                    Move <span className="font-semibold">{backlogMoveSummary.n}</span>{" "}
+                    task{backlogMoveSummary.n !== 1 ? "s" : ""} from{" "}
+                    <span className="font-semibold">{backlogMoveSummary.sprintName}</span> to the
+                    backlog.
+                  </>
+                )}
+              {backlogMoveSummary.variant === "multi" && (
+                <>
+                  Move <span className="font-semibold">{backlogMoveSummary.n}</span> tasks from
+                  their sprints to the backlog.
+                </>
+              )}
+              {backlogMoveSummary.variant === "empty" && null}
             </p>
             <div className="flex justify-end gap-2">
               <Button
@@ -691,7 +787,7 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {backlogIssues.map((issue) => {
-                    const overdue = isOverdue(issue);
+                    const overdue = isIssueOverdue(issue);
                     return (
                       <tr
                         key={issue.id}
@@ -808,12 +904,20 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                 : "Sprints will appear here when the project owner creates them."}
             </p>
           </div>
+        ) : sprintsVisibleInBacklog.length === 0 ? (
+          <div className="text-center py-12 text-gray-500 border border-dashed border-gray-200 rounded-lg bg-gray-50/50">
+            <p className="font-medium text-gray-700">No planned or active sprints</p>
+            <p className="text-sm mt-1 max-w-md mx-auto">
+              {isOwner
+                ? "Completed sprints are hidden here. Create a new sprint to plan more work."
+                : "There are no planned or active sprints right now."}
+            </p>
+          </div>
         ) : (
           <div className="space-y-6">
-            {sprints.map((sprint) => {
+            {sprintsVisibleInBacklog.map((sprint) => {
               const tasks = issuesBySprintId.get(sprint.id) || [];
               const hasTasks = tasks.length > 0;
-              const completed = sprint.status === "COMPLETED";
               const sprintActions = showSprintActionsColumn(tasks, sprint.status);
 
               return (
@@ -823,11 +927,18 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                 >
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 py-3 bg-white border-b border-gray-100">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                         <h4 className="font-semibold text-gray-900 truncate">{sprint.name}</h4>
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                          {statusLabel(sprint.status)}
-                        </span>
+                        {isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingSprint(sprint)}
+                            className="shrink-0 p-1 rounded text-gray-500 hover:text-gray-800 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                            aria-label={`Edit sprint ${sprint.name}`}
+                          >
+                            <Pencil className="w-4 h-4" aria-hidden />
+                          </button>
+                        )}
                       </div>
                       <p className="text-sm text-gray-600 mt-0.5">
                         {sprintDateRangeLabel(sprint)}
@@ -837,7 +948,9 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                       {isOwner && hasTasks && sprint.status === "INACTIVE" && (
                         <Button
                           type="button"
+                          variant="default"
                           size="sm"
+                          className="bg-primary text-white hover:bg-primary/90"
                           disabled={startSubmittingId === sprint.id}
                           onClick={() => openStartFlow(sprint, tasks)}
                         >
@@ -847,8 +960,9 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                       {isOwner && sprint.status === "ACTIVE" && (
                         <Button
                           type="button"
+                          variant="default"
                           size="sm"
-                          variant="secondary"
+                          className="bg-primary text-white hover:bg-primary/90"
                           onClick={() => openCompleteFlow(sprint, tasks)}
                         >
                           Complete sprint
@@ -870,16 +984,16 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                           <thead className="bg-gray-50">
                             <tr>
                               <th className={TH_SELECT_COL}>
-                                {isOwner && !completed ? (
+                                {isOwner ? (
                                   <SprintSelectAllCheckbox
-                                    checked={allSprintTasksSelected(tasks, completed)}
+                                    checked={allSprintTasksSelected(tasks, false)}
                                     indeterminate={
                                       someSprintTasksSelected(tasks) &&
-                                      !allSprintTasksSelected(tasks, completed)
+                                      !allSprintTasksSelected(tasks, false)
                                     }
                                     disabled={tasks.length === 0}
                                     onChange={(c) =>
-                                      onSprintSelectAll(tasks, completed, c)
+                                      onSprintSelectAll(tasks, false, c)
                                     }
                                   />
                                 ) : (
@@ -910,8 +1024,8 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {tasks.map((issue) => {
-                              const overdue = isOverdue(issue);
-                              const rowDisabled = !isOwner || completed;
+                              const overdue = isIssueOverdue(issue);
+                              const rowDisabled = !isOwner;
                               return (
                                 <tr
                                   key={issue.id}
@@ -972,12 +1086,6 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                       </div>
                     )}
                   </div>
-
-                  {completed && (
-                    <div className="px-4 py-2 bg-gray-100/80 text-xs text-gray-500 border-t border-gray-100">
-                      This sprint is completed — tasks cannot be moved.
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -999,6 +1107,7 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
         onClose={() => setModalEditIssue(null)}
         issue={modalEditIssue}
         projectMembers={allMembers}
+        statusFieldVariant={scrumEditStatusFieldVariant}
       />
 
       {pendingDeleteIssue && (

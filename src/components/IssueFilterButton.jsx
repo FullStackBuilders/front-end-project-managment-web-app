@@ -176,11 +176,29 @@ export default function IssueFilterButton({ view, align = 'end', sprintFilterOpt
   };
 
   const handleClearAll = () => {
-    dispatch(clearFilters({ view }));
+    const singleSprintId =
+      view === 'scrumBoard' &&
+      sprintFilterOptions?.length > 0 &&
+      sprintFilterOptions[0].id !== SCRUM_BOARD_SPRINT_ALL
+        ? sprintFilterOptions[0].id
+        : undefined;
+
+    dispatch(
+      clearFilters(
+        view === 'scrumBoard' && singleSprintId !== undefined
+          ? { view, defaultScrumSprintId: singleSprintId }
+          : { view },
+      ),
+    );
     setPending({
       ...INITIAL_FILTERS,
       ...(view === 'scrumBoard'
-        ? { sprintId: SCRUM_BOARD_SPRINT_ALL }
+        ? {
+            sprintId:
+              singleSprintId !== undefined
+                ? singleSprintId
+                : SCRUM_BOARD_SPRINT_ALL,
+          }
         : {}),
     });
     setOpen(false);
