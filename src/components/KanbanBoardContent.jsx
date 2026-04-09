@@ -24,6 +24,7 @@ import EditTaskModal from "./EditTaskModal";
 import ErrorModal from "./ErrorModal";
 import IssueFilterButton from "./IssueFilterButton";
 import { updateIssueStatus, moveIssue, rollbackIssueMove } from "../store/issueSlice";
+import { countActiveFilters, EMPTY_STATE_FILTER_ACTIVE_MESSAGE } from "../utils/issueFilters";
 
 const COLUMNS = [
   { id: "TO_DO", title: "To Do", color: "bg-gray-100" },
@@ -144,7 +145,7 @@ function DroppableColumn({ column, issues, projectId, onCreateIssue, onEditIssue
  * @param {string} props.projectId
  * @param {object[]} props.issues
  * @param {'board'|'scrumBoard'} props.filterView - IssueFilterButton + Redux filters key
- * @param {{ id: number; name: string }[]} [props.sprintFilterOptions] - ACTIVE sprints for scrum filter popover
+ * @param {{ id: number; name: string; status?: string }[]} [props.sprintFilterOptions] - sprints for scrum filter popover
  * @param {boolean} [props.showCreateInTodoColumn=true]
  */
 export function KanbanBoardContent({
@@ -160,6 +161,8 @@ export function KanbanBoardContent({
   const [dragError, setDragError] = useState(null);
   const dispatch = useDispatch();
   const { currentProject } = useSelector((state) => state.project);
+  const boardViewFilters = useSelector((state) => state.issues.filtersByView[filterView]);
+  const boardFiltersActive = countActiveFilters(boardViewFilters) > 0;
 
   const allMembers = useMemo(() => {
     const owner = currentProject?.owner;
@@ -254,7 +257,7 @@ export function KanbanBoardContent({
             view={filterView}
             align="start"
             sprintFilterOptions={
-              filterView === 'scrumBoard' ? sprintFilterOptions : undefined
+              filterView === "scrumBoard" ? sprintFilterOptions : undefined
             }
           />
         </div>
@@ -271,42 +274,48 @@ export function KanbanBoardContent({
         onRetry={null}
       />
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {COLUMNS.map((column) => (
-            <DroppableColumn
-              key={column.id}
-              column={column}
-              issues={groupedIssues[column.id]}
-              projectId={projectId}
-              onCreateIssue={() => setShowCreateModal(true)}
-              onEditIssue={setEditingIssue}
-              showCreate={showCreateInTodoColumn}
-            />
-          ))}
-        </div>
+      {issues.length === 0 && boardFiltersActive ? (
+        <p className="text-center text-gray-400 text-sm py-16">
+          {EMPTY_STATE_FILTER_ACTIVE_MESSAGE}
+        </p>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {COLUMNS.map((column) => (
+              <DroppableColumn
+                key={column.id}
+                column={column}
+                issues={groupedIssues[column.id]}
+                projectId={projectId}
+                onCreateIssue={() => setShowCreateModal(true)}
+                onEditIssue={setEditingIssue}
+                showCreate={showCreateInTodoColumn}
+              />
+            ))}
+          </div>
 
-        <DragOverlay>
-          {activeIssue ? (
-            <div className="rotate-3 shadow-lg">
-              <div className="relative">
-                <div className="absolute inset-x-0 top-0 h-8 bg-gray-100 rounded-t-lg flex items-center justify-center">
-                  <GripVertical className="w-4 h-4 text-gray-500" />
-                </div>
-                <div className="pt-8">
-                  <IssueCard issue={activeIssue} projectId={projectId} />
+          <DragOverlay>
+            {activeIssue ? (
+              <div className="rotate-3 shadow-lg">
+                <div className="relative">
+                  <div className="absolute inset-x-0 top-0 h-8 bg-gray-100 rounded-t-lg flex items-center justify-center">
+                    <GripVertical className="w-4 h-4 text-gray-500" />
+                  </div>
+                  <div className="pt-8">
+                    <IssueCard issue={activeIssue} projectId={projectId} />
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )}
 
       {showCreateModal && (
         <CreateIssueModal

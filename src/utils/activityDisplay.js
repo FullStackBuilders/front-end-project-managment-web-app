@@ -66,8 +66,19 @@ export function getActivityActionFragment(item) {
   return "updated this task";
 }
 
+/**
+ * Timeline display for assignee old/new values: empty or blank means Unassigned
+ * (matches "Name to Unassigned" when clearing assignee).
+ */
+export function formatAssigneeActivityValue(value) {
+  if (value == null) return "Unassigned";
+  const s = String(value).trim();
+  if (s === "" || s === "—" || s === "-") return "Unassigned";
+  return s;
+}
+
 export function formatDueDateValue(isoOrNull) {
-  if (!isoOrNull) return "—";
+  if (!isoOrNull) return "None";
   try {
     const d = new Date(isoOrNull.includes("T") ? isoOrNull : `${isoOrNull}T00:00:00`);
     if (isNaN(d.getTime())) return isoOrNull;

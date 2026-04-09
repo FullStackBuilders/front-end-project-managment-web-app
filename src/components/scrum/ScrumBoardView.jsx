@@ -2,14 +2,14 @@ import { useMemo, useEffect, useCallback, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { KanbanBoardContent } from "@/components/KanbanBoardContent";
 import { sprintApi } from "@/services/sprintApi";
-import { applyFilters, SCRUM_BOARD_SPRINT_ALL } from "@/utils/issueFilters";
+import { applyFilters, getScrumSprintIdsFilter } from "@/utils/issueFilters";
 import { issueSprintId } from "@/utils/scrumBacklogUtils";
 import AuthService from "@/services/AuthService";
 import { setFilters } from "@/store/issueSlice";
 
 /**
- * Scrum Kanban: sprint filter in Redux `filtersByView.scrumBoard.sprintId` (`'all'` | sprint id).
- * With multiple ACTIVE sprints, "All" is offered; with exactly one, selection defaults to that sprint (no "All").
+ * Scrum Kanban: optional sprint narrowing via Redux `filtersByView.scrumBoard.sprintIds`
+ * (empty = all ACTIVE sprints).
  *
  * @param {object} props
  * @param {string|number} props.projectId
@@ -55,72 +55,47 @@ export default function ScrumBoardView({ projectId }) {
     [activeSprintsInApiOrder],
   );
 
-  const sprintFilterOptions = useMemo(() => {
-    const rows = activeSprintsInApiOrder.map((s) => ({
-      id: Number(s.id),
-      name: s.name,
-    }));
-    if (activeSprintsInApiOrder.length <= 1) {
-      return rows;
-    }
-    return [{ id: SCRUM_BOARD_SPRINT_ALL, name: "All" }, ...rows];
-  }, [activeSprintsInApiOrder]);
+  /** Rows for the filter popover — active sprints only (multi-select replaces "All"). */
+  const sprintFilterOptions = useMemo(
+    () =>
+      activeSprintsInApiOrder.map((s) => ({
+        id: Number(s.id),
+        name: s.name,
+        status: s.status,
+      })),
+    [activeSprintsInApiOrder],
+  );
 
+  /** Drop sprint filter ids that are no longer active. */
   useEffect(() => {
     if (sprintsLoading || activeSprintsInApiOrder.length === 0) return;
 
-    const n = activeSprintsInApiOrder.length;
-    const onlySprintId =
-      n === 1 ? Number(activeSprintsInApiOrder[0].id) : null;
-
-    if (n === 1 && onlySprintId != null) {
-      const cur = scrumFilters.sprintId;
-      const curNum =
-        cur !== SCRUM_BOARD_SPRINT_ALL && cur != null ? Number(cur) : null;
-      const needsFix =
-        cur === SCRUM_BOARD_SPRINT_ALL ||
-        cur == null ||
-        cur === undefined ||
-        curNum == null ||
-        !activeIds.has(curNum) ||
-        curNum !== onlySprintId;
-      if (needsFix) {
-        dispatch(
-          setFilters({
-            view: "scrumBoard",
-            filters: { ...scrumFilters, sprintId: onlySprintId },
-          }),
-        );
-      }
-      return;
-    }
-
-    const sid = scrumFilters.sprintId;
-    if (sid === SCRUM_BOARD_SPRINT_ALL) return;
-    if (sid == null || sid === undefined) {
+    const ids = getScrumSprintIdsFilter(scrumFilters);
+    const pruned = ids.filter((id) => activeIds.has(Number(id)));
+    if (pruned.length !== ids.length) {
+      const { sprintId: _legacy, ...rest } = scrumFilters;
       dispatch(
         setFilters({
           view: "scrumBoard",
-          filters: { ...scrumFilters, sprintId: SCRUM_BOARD_SPRINT_ALL },
-        }),
-      );
-      return;
-    }
-    if (!activeIds.has(Number(sid))) {
-      dispatch(
-        setFilters({
-          view: "scrumBoard",
-          filters: { ...scrumFilters, sprintId: SCRUM_BOARD_SPRINT_ALL },
+          filters: { ...rest, sprintIds: pruned },
         }),
       );
     }
-  }, [sprintsLoading, activeSprintsInApiOrder, scrumFilters, dispatch, activeIds]);
+  }, [
+    sprintsLoading,
+    activeSprintsInApiOrder.length,
+    activeIds,
+    scrumFilters,
+    dispatch,
+  ]);
+
+  const selectedSprintIds = getScrumSprintIdsFilter(scrumFilters);
 
   const boardReady =
     !sprintsLoading &&
     activeSprintsInApiOrder.length > 0 &&
-    (scrumFilters.sprintId === SCRUM_BOARD_SPRINT_ALL ||
-      activeIds.has(Number(scrumFilters.sprintId)));
+    (selectedSprintIds.length === 0 ||
+      selectedSprintIds.every((id) => activeIds.has(Number(id))));
 
   const activeSprintIssues = useMemo(() => {
     return allIssues.filter((issue) => {

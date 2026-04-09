@@ -1,10 +1,14 @@
 import { useState, useCallback } from "react";
 import ScrumBacklogView from "./ScrumBacklogView";
 import ScrumBoardView from "./ScrumBoardView";
+import ScrumListView from "./ScrumListView";
+import ScrumCalendarView from "./ScrumCalendarView";
 
 const TABS = [
   { id: "backlog", label: "Backlog" },
   { id: "board", label: "Board" },
+  { id: "list", label: "List" },
+  { id: "calendar", label: "Calendar" },
 ];
 
 /**
@@ -54,6 +58,18 @@ export default function ScrumProjectWorkspace({ projectId }) {
       {activeTab === "board" && (
         <div role="tabpanel" aria-labelledby="scrum-tab-board">
           <ScrumBoardView projectId={projectId} />
+        </div>
+      )}
+
+      {activeTab === "list" && (
+        <div role="tabpanel" aria-labelledby="scrum-tab-list">
+          <ScrumListView projectId={projectId} />
+        </div>
+      )}
+
+      {activeTab === "calendar" && (
+        <div role="tabpanel" aria-labelledby="scrum-tab-calendar">
+          <ScrumCalendarView projectId={projectId} />
         </div>
       )}
     </div>

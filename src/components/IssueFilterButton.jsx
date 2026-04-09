@@ -2,11 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Filter } from 'lucide-react';
 import { setFilters, clearFilters } from '../store/issueSlice';
-import {
-  INITIAL_FILTERS,
-  countActiveFilters,
-  SCRUM_BOARD_SPRINT_ALL,
-} from '../utils/issueFilters';
+import { countActiveFilters } from '../utils/issueFilters';
 import SprintSelectPopoverField from './SprintSelectPopoverField';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -39,7 +35,7 @@ function SectionLabel({ children }) {
   );
 }
 
-function PillButton({ active, onClick, children }) {
+function PillButton({ active, onClick, children, className = '' }) {
   return (
     <button
       type="button"
@@ -48,7 +44,7 @@ function PillButton({ active, onClick, children }) {
         ${active
           ? 'bg-primary text-white border-primary'
           : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
-        }`}
+        } ${className}`}
     >
       {children}
     </button>
@@ -59,43 +55,41 @@ function PillButton({ active, onClick, children }) {
 
 /**
  * A single "Filter" button that opens a view-specific popup panel below it.
- * Follows the identical outside-click + ref pattern used by the Columns button
- * in IssueListView.jsx.
+ * Filter changes apply immediately to Redux (no Apply button).
  *
- * @param {'board'|'scrumBoard'|'list'|'calendar'} view - controls which filter sections appear
- * @param {{ id: number; name: string }[]} [sprintFilterOptions] - ACTIVE sprints for scrum board sprint row (top of panel)
+ * @param {'board'|'scrumBoard'|'scrumCalendar'|'scrumList'|'list'|'calendar'} view - controls which filter sections appear
+ * @param {{ id: number; name: string; status?: string }[]} [sprintFilterOptions] - scrum board/list sprint row (optional status for badge)
  */
 export default function IssueFilterButton({ view, align = 'end', sprintFilterOptions }) {
   const dispatch = useDispatch();
   const activeFilterCount = useSelector((state) =>
-    countActiveFilters(state.issues.filtersByView[view])
+    countActiveFilters(state.issues.filtersByView[view]),
   );
   const reduxFilters = useSelector((state) => state.issues.filtersByView[view]);
 
   const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState({ ...INITIAL_FILTERS });
   const panelRef = useRef(null);
 
   const showAssignedToMe =
-    view === 'board' || view === 'scrumBoard' || view === 'list';
-  const showStatus       = view === 'list'  || view === 'calendar';
+    view === 'board' ||
+    view === 'scrumBoard' ||
+    view === 'scrumCalendar' ||
+    view === 'scrumList' ||
+    view === 'list';
+  const showStatus =
+    view === 'list' || view === 'scrumList' || view === 'calendar';
 
-  // Sync pending state from Redux whenever the panel opens
-  useEffect(() => {
-    if (open) {
-      const defaultSprint =
-        view === 'scrumBoard' ? SCRUM_BOARD_SPRINT_ALL : null;
-      setPending({
-        ...reduxFilters,
-        priorities: [...reduxFilters.priorities],
-        statuses: [...reduxFilters.statuses],
-        sprintId:
-          reduxFilters.sprintId === undefined || reduxFilters.sprintId === null
-            ? defaultSprint
-            : reduxFilters.sprintId,
-      });
-    }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const patchFilters = useCallback(
+    (patch) => {
+      let next = { ...reduxFilters, ...patch };
+      if (view === 'scrumBoard' || view === 'scrumCalendar' || view === 'scrumList') {
+        const { sprintId: _legacy, ...rest } = next;
+        next = rest;
+      }
+      dispatch(setFilters({ view, filters: next }));
+    },
+    [dispatch, view, reduxFilters],
+  );
 
   // Close on outside click (same pattern as Columns button in IssueListView)
   useEffect(() => {
@@ -115,96 +109,92 @@ export default function IssueFilterButton({ view, align = 'end', sprintFilterOpt
     return () => document.removeEventListener('keydown', handler);
   }, [open]);
 
-  // ── Pending state helpers ──────────────────────────────────────────────────
+  const togglePriority = useCallback(
+    (value) => {
+      const p = reduxFilters.priorities ?? [];
+      const priorities = p.includes(value)
+        ? p.filter((v) => v !== value)
+        : [...p, value];
+      patchFilters({ priorities });
+    },
+    [patchFilters, reduxFilters.priorities],
+  );
 
-  const togglePriority = useCallback((value) => {
-    setPending((prev) => ({
-      ...prev,
-      priorities: prev.priorities.includes(value)
-        ? prev.priorities.filter((v) => v !== value)
-        : [...prev.priorities, value],
-    }));
-  }, []);
-
-  const toggleStatus = useCallback((value) => {
-    setPending((prev) => ({
-      ...prev,
-      statuses: prev.statuses.includes(value)
-        ? prev.statuses.filter((v) => v !== value)
-        : [...prev.statuses, value],
-    }));
-  }, []);
+  const toggleStatus = useCallback(
+    (value) => {
+      const s = reduxFilters.statuses ?? [];
+      const statuses = s.includes(value)
+        ? s.filter((v) => v !== value)
+        : [...s, value];
+      patchFilters({ statuses });
+    },
+    [patchFilters, reduxFilters.statuses],
+  );
 
   const toggleAssignedToMe = useCallback(() => {
-    setPending((prev) => ({ ...prev, assignedToMe: !prev.assignedToMe }));
-  }, []);
+    patchFilters({ assignedToMe: !reduxFilters.assignedToMe });
+  }, [patchFilters, reduxFilters.assignedToMe]);
 
-  // Due date presets are mutually exclusive; clicking the active one deselects it
-  const selectPreset = useCallback((value) => {
-    setPending((prev) => ({
-      ...prev,
-      dueDatePreset: prev.dueDatePreset === value ? null : value,
-      // Selecting a preset always clears the custom date range
-      dueDateFrom: null,
-      dueDateTo:   null,
-    }));
-  }, []);
+  /** Today / This week / This month — mutually exclusive with each other; clears custom range. */
+  const selectQuickDuePreset = useCallback(
+    (value) => {
+      const nextPreset = reduxFilters.dueDatePreset === value ? null : value;
+      patchFilters({
+        dueDatePreset: nextPreset,
+        dueDateFrom: null,
+        dueDateTo: null,
+      });
+    },
+    [patchFilters, reduxFilters.dueDatePreset],
+  );
 
-  const handleDateFromChange = useCallback((e) => {
-    const val = e.target.value || null;
-    setPending((prev) => ({
-      ...prev,
-      dueDatePreset: 'CUSTOM',
-      dueDateFrom:   val,
-    }));
-  }, []);
+  /** Toggle Custom: enables date inputs; turning off clears range. Does not count as active until both dates set. */
+  const toggleCustomDueRange = useCallback(() => {
+    if (reduxFilters.dueDatePreset === 'CUSTOM') {
+      patchFilters({ dueDatePreset: null, dueDateFrom: null, dueDateTo: null });
+    } else {
+      patchFilters({
+        dueDatePreset: 'CUSTOM',
+        dueDateFrom: null,
+        dueDateTo: null,
+      });
+    }
+  }, [patchFilters, reduxFilters.dueDatePreset]);
 
-  const handleDateToChange = useCallback((e) => {
-    const val = e.target.value || null;
-    setPending((prev) => ({
-      ...prev,
-      dueDatePreset: 'CUSTOM',
-      dueDateTo: val,
-    }));
-  }, []);
+  const customDatesEnabled = reduxFilters.dueDatePreset === 'CUSTOM';
 
-  // ── Actions ────────────────────────────────────────────────────────────────
+  const handleDateFromChange = useCallback(
+    (e) => {
+      if (!customDatesEnabled) return;
+      const val = e.target.value || null;
+      patchFilters({
+        dueDatePreset: 'CUSTOM',
+        dueDateFrom: val,
+      });
+    },
+    [patchFilters, customDatesEnabled],
+  );
 
-  const handleApply = () => {
-    dispatch(setFilters({ view, filters: pending }));
+  const handleDateToChange = useCallback(
+    (e) => {
+      if (!customDatesEnabled) return;
+      const val = e.target.value || null;
+      patchFilters({
+        dueDatePreset: 'CUSTOM',
+        dueDateTo: val,
+      });
+    },
+    [patchFilters, customDatesEnabled],
+  );
+
+  const handleClearAll = useCallback(() => {
+    dispatch(clearFilters({ view }));
     setOpen(false);
-  };
+  }, [dispatch, view]);
 
-  const handleClearAll = () => {
-    const singleSprintId =
-      view === 'scrumBoard' &&
-      sprintFilterOptions?.length > 0 &&
-      sprintFilterOptions[0].id !== SCRUM_BOARD_SPRINT_ALL
-        ? sprintFilterOptions[0].id
-        : undefined;
-
-    dispatch(
-      clearFilters(
-        view === 'scrumBoard' && singleSprintId !== undefined
-          ? { view, defaultScrumSprintId: singleSprintId }
-          : { view },
-      ),
-    );
-    setPending({
-      ...INITIAL_FILTERS,
-      ...(view === 'scrumBoard'
-        ? {
-            sprintId:
-              singleSprintId !== undefined
-                ? singleSprintId
-                : SCRUM_BOARD_SPRINT_ALL,
-          }
-        : {}),
-    });
-    setOpen(false);
-  };
-
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const sprintIds = Array.isArray(reduxFilters.sprintIds)
+    ? reduxFilters.sprintIds
+    : [];
 
   return (
     <div className="relative" ref={panelRef}>
@@ -246,8 +236,10 @@ export default function IssueFilterButton({ view, align = 'end', sprintFilterOpt
 
           <div className="px-5 py-4 space-y-5">
 
-            {/* ── Sprint (Scrum board — SectionLabel matches Assigned to / Priority) ─ */}
-            {view === 'scrumBoard' &&
+            {/* ── Sprint (Scrum board) ─ */}
+            {(view === 'scrumBoard' ||
+              view === 'scrumCalendar' ||
+              view === 'scrumList') &&
               sprintFilterOptions &&
               sprintFilterOptions.length > 0 && (
                 <div>
@@ -258,12 +250,11 @@ export default function IssueFilterButton({ view, align = 'end', sprintFilterOpt
                     Sprint
                   </label>
                   <SprintSelectPopoverField
+                    selectionMode="multi"
                     showLabel={false}
                     options={sprintFilterOptions}
-                    value={pending.sprintId ?? null}
-                    onChange={(id) =>
-                      setPending((prev) => ({ ...prev, sprintId: id }))
-                    }
+                    value={sprintIds}
+                    onChange={(ids) => patchFilters({ sprintIds: ids })}
                     triggerId="issue-filter-scrum-sprint-trigger"
                     rootClassName="mb-0"
                   />
@@ -275,7 +266,7 @@ export default function IssueFilterButton({ view, align = 'end', sprintFilterOpt
               <div>
                 <SectionLabel>Assigned to</SectionLabel>
                 <PillButton
-                  active={pending.assignedToMe}
+                  active={reduxFilters.assignedToMe}
                   onClick={toggleAssignedToMe}
                 >
                   Assigned to Me
@@ -290,7 +281,7 @@ export default function IssueFilterButton({ view, align = 'end', sprintFilterOpt
                 {PRIORITY_OPTIONS.map(({ value, label }) => (
                   <PillButton
                     key={value}
-                    active={pending.priorities.includes(value)}
+                    active={(reduxFilters.priorities ?? []).includes(value)}
                     onClick={() => togglePriority(value)}
                   >
                     {label}
@@ -302,35 +293,45 @@ export default function IssueFilterButton({ view, align = 'end', sprintFilterOpt
             {/* ── Due Date ───────────────────────────────────────────────── */}
             <div>
               <SectionLabel>Due Date</SectionLabel>
-              {/* Presets — mutually exclusive */}
-              <div className="flex flex-wrap gap-2 mb-3">
+              <div className="flex flex-wrap gap-2 mb-2">
                 {DUE_DATE_PRESETS.map(({ value, label }) => (
                   <PillButton
                     key={value}
-                    active={pending.dueDatePreset === value}
-                    onClick={() => selectPreset(value)}
+                    active={reduxFilters.dueDatePreset === value}
+                    onClick={() => selectQuickDuePreset(value)}
                   >
                     {label}
                   </PillButton>
                 ))}
               </div>
-              {/* Custom date range */}
+              <div className="mb-2">
+                <PillButton
+                  active={reduxFilters.dueDatePreset === 'CUSTOM'}
+                  onClick={toggleCustomDueRange}
+                  className="w-full flex justify-center"
+                >
+                  Custom
+                </PillButton>
+              </div>
+              <p className="text-[10px] text-gray-500 mb-1.5">
+                Start date and end date apply as one filter when both are set.
+              </p>
               <div className="flex items-center gap-3">
                 <input
                   type="date"
-                  value={pending.dueDatePreset === 'CUSTOM' ? (pending.dueDateFrom ?? '') : ''}
+                  disabled={!customDatesEnabled}
+                  value={customDatesEnabled ? (reduxFilters.dueDateFrom ?? '') : ''}
                   onChange={handleDateFromChange}
-                  className="min-w-0 flex-1 text-xs border border-gray-300 rounded-md px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                  placeholder="Start"
+                  className="min-w-0 flex-1 text-xs border border-gray-300 rounded-md px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:cursor-not-allowed disabled:bg-gray-50"
                 />
                 <span className="text-xs text-gray-400 shrink-0">to</span>
                 <input
                   type="date"
-                  value={pending.dueDatePreset === 'CUSTOM' ? (pending.dueDateTo ?? '') : ''}
+                  disabled={!customDatesEnabled}
+                  value={customDatesEnabled ? (reduxFilters.dueDateTo ?? '') : ''}
                   onChange={handleDateToChange}
-                  min={pending.dueDatePreset === 'CUSTOM' ? (pending.dueDateFrom ?? '') : ''}
-                  className="min-w-0 flex-1 text-xs border border-gray-300 rounded-md px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                  placeholder="End"
+                  min={customDatesEnabled ? (reduxFilters.dueDateFrom ?? '') : ''}
+                  className="min-w-0 flex-1 text-xs border border-gray-300 rounded-md px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:cursor-not-allowed disabled:bg-gray-50"
                 />
               </div>
             </div>
@@ -343,7 +344,7 @@ export default function IssueFilterButton({ view, align = 'end', sprintFilterOpt
                   {STATUS_OPTIONS.map(({ value, label }) => (
                     <PillButton
                       key={value}
-                      active={pending.statuses.includes(value)}
+                      active={(reduxFilters.statuses ?? []).includes(value)}
                       onClick={() => toggleStatus(value)}
                     >
                       {label}
@@ -355,14 +356,13 @@ export default function IssueFilterButton({ view, align = 'end', sprintFilterOpt
 
           </div>
 
-          {/* Panel footer — Apply */}
-          <div className="px-4 pb-3 pt-2 border-t border-gray-100">
+          <div className="px-5 pb-4 pt-2 border-t border-gray-100 flex justify-center">
             <button
               type="button"
-              onClick={handleApply}
-              className="w-full py-2 text-sm font-medium rounded-md bg-primary text-white hover:bg-primary/90 transition-colors cursor-pointer"
+              onClick={() => setOpen(false)}
+              className="px-6 py-2 text-sm font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
             >
-              Apply
+              Close
             </button>
           </div>
         </div>

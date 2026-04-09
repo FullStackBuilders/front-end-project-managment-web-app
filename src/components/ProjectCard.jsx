@@ -32,19 +32,6 @@ export default function ProjectCard({ project, onDelete, currentUserId }) {
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      });
-    } catch {
-      return '';
-    }
-  };
-
   const getProjectWarningMessage = () => {
     const hasIssues = project.issues && project.issues.length > 0;
     const hasTeamMembers = project.team && project.team.length > 1; // more than just owner
@@ -75,7 +62,7 @@ export default function ProjectCard({ project, onDelete, currentUserId }) {
     <>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
         {/* Header */}
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between gap-2 mb-4">
           <div className="flex-1 min-w-0">
             <h3 className="text-lg font-semibold text-gray-900 truncate mb-1">
               {project.name}
@@ -85,6 +72,11 @@ export default function ProjectCard({ project, onDelete, currentUserId }) {
               {isOwner && <span className="ml-1 text-blue-600 font-medium">(You)</span>}
             </p>
           </div>
+          {project.framework && (
+            <span className="inline-flex shrink-0 self-start items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+              {project.framework}
+            </span>
+          )}
         </div>
 
         {/* Description */}
@@ -94,16 +86,11 @@ export default function ProjectCard({ project, onDelete, currentUserId }) {
           </p>
         </div>
 
-        {/* Category + framework */}
+        {/* Category */}
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
             {project.category}
           </span>
-          {project.framework && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
-              {project.framework}
-            </span>
-          )}
         </div>
 
         {/* Tags */}

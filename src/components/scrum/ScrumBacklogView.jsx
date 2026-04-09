@@ -337,16 +337,19 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
 
   const moveIssuesToSprint = useCallback(
     async (targetSprintId, issueList) => {
-      const targetName =
-        sprints.find((s) => s.id === targetSprintId)?.name ?? null;
+      const targetSprint = sprints.find((s) => s.id === targetSprintId);
+      const targetName = targetSprint?.name ?? null;
+      const targetSprintStatus = targetSprint?.status ?? null;
       for (const issue of issueList) {
         const prevId = issueSprintId(issue);
         const prevName = issue.sprintName ?? null;
+        const prevStatus = issue.sprintStatus ?? null;
         dispatch(
           assignSprintOptimistic({
             issueId: issue.id,
             sprintId: targetSprintId,
             sprintName: targetName,
+            sprintStatus: targetSprintStatus,
           }),
         );
         try {
@@ -362,6 +365,7 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
               issueId: issue.id,
               sprintId: prevId,
               sprintName: prevName,
+              sprintStatus: prevStatus,
             }),
           );
           throw err;
@@ -381,11 +385,13 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
       for (const issue of issueList) {
         const prevId = issueSprintId(issue);
         const prevName = issue.sprintName ?? null;
+        const prevStatus = issue.sprintStatus ?? null;
         dispatch(
           assignSprintOptimistic({
             issueId: issue.id,
             sprintId: null,
             sprintName: null,
+            sprintStatus: null,
           }),
         );
         try {
@@ -398,6 +404,7 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
               issueId: issue.id,
               sprintId: prevId,
               sprintName: prevName,
+              sprintStatus: prevStatus,
             }),
           );
           throw err;

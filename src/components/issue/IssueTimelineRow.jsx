@@ -1,8 +1,10 @@
 import { Flag } from "lucide-react";
 import StatusBadge from "../StatusBadge";
+import { TimelineStyleBadge } from "../ui/TimelineStyleBadge";
 import { getAvatarColor } from "../../utils/avatarColor";
 import { formatSmartTimestamp } from "../../utils/dateUtils";
 import {
+  formatAssigneeActivityValue,
   formatDueDateValue,
   getActivityActionFragment,
   parseOccurredAt,
@@ -36,7 +38,7 @@ function PriorityChip({ label }) {
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}
     >
       <Flag className="w-3 h-3 mr-1" />
-      {label || "—"}
+      {label || "None"}
     </span>
   );
 }
@@ -52,13 +54,13 @@ function FieldChangeBody({ item }) {
         {oldE ? (
           <StatusBadge status={oldE} />
         ) : (
-          <span className="text-gray-600">{oldValue || "—"}</span>
+          <span className="text-gray-600">{oldValue || "None"}</span>
         )}
         <span className="text-gray-400 lowercase">to</span>
         {newE ? (
           <StatusBadge status={newE} />
         ) : (
-          <span className="text-gray-600">{newValue || "—"}</span>
+          <span className="text-gray-600">{newValue || "None"}</span>
         )}
       </div>
     );
@@ -75,11 +77,13 @@ function FieldChangeBody({ item }) {
   }
 
   if (fieldName === "assignee") {
+    const fromLabel = formatAssigneeActivityValue(oldValue);
+    const toLabel = formatAssigneeActivityValue(newValue);
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
-        <span className="font-medium text-gray-900">{oldValue || "—"}</span>
+        <span className="font-medium text-gray-900">{fromLabel}</span>
         <span className="text-gray-400 lowercase">to</span>
-        <span className="font-medium text-gray-900">{newValue || "—"}</span>
+        <span className="font-medium text-gray-900">{toLabel}</span>
       </div>
     );
   }
@@ -108,7 +112,7 @@ function FieldChangeBody({ item }) {
             {newValue}
           </p>
         ) : (
-          <span className="text-gray-500">—</span>
+          <span className="text-gray-500">None</span>
         )}
       </div>
     );
@@ -116,9 +120,9 @@ function FieldChangeBody({ item }) {
 
   return (
     <p className="text-sm text-gray-700">
-      <span className="text-gray-600">{oldValue || "—"}</span>
+      <span className="text-gray-600">{oldValue || "None"}</span>
       <span className="mx-2 text-gray-400 lowercase">to</span>
-      <span className="text-gray-600">{newValue || "—"}</span>
+      <span className="text-gray-600">{newValue || "None"}</span>
     </p>
   );
 }
@@ -172,9 +176,9 @@ export default function IssueTimelineRow({ item, tabMode }) {
           </p>
           <div className="flex flex-wrap items-center gap-2 mt-1">
             {showCategoryPill && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border bg-gray-200 text-black border-gray-300">
+              <TimelineStyleBadge>
                 {isComment ? "Comment" : "History"}
-              </span>
+              </TimelineStyleBadge>
             )}
             <span className="text-xs text-gray-500">{timeLabel}</span>
           </div>

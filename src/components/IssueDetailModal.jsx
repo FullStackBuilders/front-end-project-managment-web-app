@@ -150,6 +150,8 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
   const assignedByDisplayName =
     issueDetail?.assignedByName || issueDetail?.createdByName || null;
 
+  const isScrumProject = issueDetail?.projectFramework === "SCRUM";
+
   if (!showModal) return null;
 
   return (
@@ -157,7 +159,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
-          <h2 className="text-xl font-semibold text-gray-900">Issue Details</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Task Details</h2>
           <button
             onClick={handleClose}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -170,7 +172,7 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center p-8 text-gray-500">
-              Loading issue details...
+              Loading task details...
             </div>
           ) : error ? (
             <div className="flex items-center justify-center p-8 text-red-500">
@@ -332,6 +334,18 @@ export default function IssueDetailModal({ showModal, setShowModal, issueId }) {
                       {formatDate(issueDetail.dueDate)}
                     </span>
                   </div>
+
+                  {/* Sprint — Scrum only; below Due Date, aligned with right column */}
+                  {isScrumProject && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Sprint
+                      </label>
+                      <span className="text-gray-900">
+                        {issueDetail.sprintName || "Backlog"}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

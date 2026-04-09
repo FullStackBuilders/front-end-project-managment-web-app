@@ -3,8 +3,6 @@ import { isToday, isThisWeek, isThisMonth, parseISO } from 'date-fns';
 import {
   INITIAL_FILTERS,
   applyFilters,
-  countActiveFilters,
-  SCRUM_BOARD_SPRINT_ALL,
 } from '../utils/issueFilters';
 import { isIssueOverdue } from '../utils/issueDue';
 import AuthService from '../services/AuthService';
@@ -115,10 +113,12 @@ export const assignIssueSprint = createAsyncThunk(
 );
 
 const makeInitialFiltersByView = () => ({
-  board:      { ...INITIAL_FILTERS },
-  scrumBoard: { ...INITIAL_FILTERS, sprintId: SCRUM_BOARD_SPRINT_ALL },
-  list:       { ...INITIAL_FILTERS },
-  calendar:   { ...INITIAL_FILTERS },
+  board:          { ...INITIAL_FILTERS },
+  scrumBoard:     { ...INITIAL_FILTERS },
+  scrumCalendar:  { ...INITIAL_FILTERS },
+  scrumList:      { ...INITIAL_FILTERS },
+  list:           { ...INITIAL_FILTERS },
+  calendar:       { ...INITIAL_FILTERS },
 });
 
 const issueSlice = createSlice({
@@ -163,34 +163,25 @@ const issueSlice = createSlice({
     },
     // Reset filters for a specific view — payload: { view }
     clearFilters: (state, action) => {
-      const { view, defaultScrumSprintId } = action.payload;
-      if (view === 'scrumBoard') {
-        const sprintId =
-          defaultScrumSprintId !== undefined && defaultScrumSprintId !== null
-            ? defaultScrumSprintId
-            : SCRUM_BOARD_SPRINT_ALL;
-        state.filtersByView.scrumBoard = {
-          ...INITIAL_FILTERS,
-          sprintId,
-        };
-      } else {
-        state.filtersByView[view] = { ...INITIAL_FILTERS };
-      }
+      const { view } = action.payload;
+      state.filtersByView[view] = { ...INITIAL_FILTERS };
     },
     assignSprintOptimistic: (state, action) => {
-      const { issueId, sprintId, sprintName } = action.payload;
+      const { issueId, sprintId, sprintName, sprintStatus } = action.payload;
       const issue = state.issues.find((i) => i.id === issueId);
       if (issue) {
         issue.sprintId = sprintId;
         issue.sprintName = sprintName ?? null;
+        issue.sprintStatus = sprintStatus ?? null;
       }
     },
     rollbackAssignSprint: (state, action) => {
-      const { issueId, sprintId, sprintName } = action.payload;
+      const { issueId, sprintId, sprintName, sprintStatus } = action.payload;
       const issue = state.issues.find((i) => i.id === issueId);
       if (issue) {
         issue.sprintId = sprintId;
         issue.sprintName = sprintName ?? null;
+        issue.sprintStatus = sprintStatus ?? null;
       }
     },
   },
@@ -332,6 +323,21 @@ const makeSelectFilteredIssues = (view) =>
 export const selectBoardFilteredIssues    = makeSelectFilteredIssues('board');
 export const selectListFilteredIssues     = makeSelectFilteredIssues('list');
 export const selectCalendarFilteredIssues = makeSelectFilteredIssues('calendar');
+
+/** Scrum List tab: only issues in ACTIVE or COMPLETED sprints, then view filters. */
+export const selectScrumListFilteredIssues = createSelector(
+  (state) => state.issues.issues,
+  (state) => state.issues.filtersByView.scrumList,
+  (issues, filters) => {
+    const scoped = issues.filter(
+      (i) =>
+        i.sprintId != null &&
+        i.sprintId !== '' &&
+        (i.sprintStatus === 'ACTIVE' || i.sprintStatus === 'COMPLETED'),
+    );
+    return applyFilters(scoped, filters, AuthService.getCurrentUserId());
+  },
+);
 
 // ── Analytics Selectors ───────────────────────────────────────────────────────
 

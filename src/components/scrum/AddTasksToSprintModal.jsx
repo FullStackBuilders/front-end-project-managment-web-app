@@ -90,11 +90,6 @@ export default function AddTasksToSprintModal({
               }
               triggerId="add-tasks-to-sprint-sprint-trigger"
             />
-            {!hasSprints && (
-              <p className="text-xs text-amber-800 mt-2 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
-                No sprints yet — create one first.
-              </p>
-            )}
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}

@@ -6,14 +6,16 @@ import { Button } from '@/components/ui/button';
 import { formatSmartTimestamp } from '../utils/dateUtils';
 import { isIssueOverdue } from '../utils/issueDue';
 import { useAuth } from '../context/AuthContext';
-import { deleteIssue, selectListFilteredIssues } from '../store/issueSlice';
+import { deleteIssue, selectListFilteredIssues } from '@/store/issueSlice';
+import { countActiveFilters, EMPTY_STATE_FILTER_ACTIVE_MESSAGE } from '@/utils/issueFilters';
 import CreateIssueModal from './CreateIssueModal';
 import EditTaskModal from './EditTaskModal';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 import IssueFilterButton from './IssueFilterButton';
 import StatusBadge from './StatusBadge';
+import { SprintLifecycleBadge } from '@/components/ui/TimelineStyleBadge';
 
-const COLUMN_DEFINITIONS = [
+const BASE_COLUMN_DEFINITIONS = [
   { id: 'name',         label: 'Name',           defaultVisible: true  },
   { id: 'status',       label: 'Status',         defaultVisible: true  },
   { id: 'priority',     label: 'Priority',       defaultVisible: true  },
@@ -25,6 +27,23 @@ const COLUMN_DEFINITIONS = [
   { id: 'lastUpdatedAt', label: 'Last Updated At', defaultVisible: false },
   { id: 'assignedBy',   label: 'Assigned By',    defaultVisible: false },
 ];
+
+const SCRUM_LIST_COLUMN_DEFINITIONS = [
+  BASE_COLUMN_DEFINITIONS[0],
+  { id: 'sprint', label: 'Sprint', defaultVisible: true },
+  { id: 'sprintStatus', label: 'Sprint Status', defaultVisible: true },
+  ...BASE_COLUMN_DEFINITIONS.slice(1),
+];
+
+function columnDefinitionsForVariant(variant) {
+  return variant === 'scrum' ? SCRUM_LIST_COLUMN_DEFINITIONS : BASE_COLUMN_DEFINITIONS;
+}
+
+function listColumnStorageKey(projectId, variant) {
+  return variant === 'scrum'
+    ? `teamboard_list_cols_${projectId}_scrum`
+    : `teamboard_list_cols_${projectId}`;
+}
 
 const PRIORITY_ORDER = { HIGH: 1, MEDIUM: 2, LOW: 3 };
 const SORT_DEFAULT_DIR = { lastUpdatedAt: 'desc' };
@@ -43,6 +62,8 @@ const getSortValue = (issue, col) => {
                            ? new Date(issue.lastUpdatedAt).getTime()
                            : 0;
     case 'assignedBy':   return (issue.assignedByName || '').toLowerCase();
+    case 'sprint':        return (issue.sprintName || '').toLowerCase();
+    case 'sprintStatus':  return (issue.sprintStatus || '').toLowerCase();
     default: return '';
   }
 };
@@ -145,9 +166,9 @@ function TruncatedCell({
   );
 }
 
-function loadVisibleColumnsFromStorage(projectId, defaultColumns) {
+function loadVisibleColumnsFromStorage(storageKey, defaultColumns) {
   try {
-    const raw = localStorage.getItem(`teamboard_list_cols_${projectId}`);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return defaultColumns;
     const parsed = JSON.parse(raw);
     const merged = { ...defaultColumns, ...parsed };
@@ -165,11 +186,23 @@ function loadVisibleColumnsFromStorage(projectId, defaultColumns) {
   }
 }
 
-export default function IssueListView({ projectId }) {
+export default function IssueListView({
+  projectId,
+  issues: issuesProp,
+  filterView = 'list',
+  sprintFilterOptions,
+  variant = 'kanban',
+}) {
   const dispatch = useDispatch();
   const { isCreator, isProjectOwner, canUpdateIssueStatus } = useAuth();
-  const issues = useSelector(selectListFilteredIssues);
+  const listFiltered = useSelector(selectListFilteredIssues);
+  const issues = issuesProp ?? listFiltered;
   const { currentProject } = useSelector((state) => state.project);
+  const viewFilters = useSelector((state) => state.issues.filtersByView[filterView]);
+  const listFiltersActive = countActiveFilters(viewFilters) > 0;
+
+  const columnDefs = columnDefinitionsForVariant(variant);
+  const columnsStorageKey = listColumnStorageKey(projectId, variant);
 
   const [expandedCell, setExpandedCell] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -182,9 +215,9 @@ export default function IssueListView({ projectId }) {
 
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const defaultColumns = Object.fromEntries(
-      COLUMN_DEFINITIONS.map((c) => [c.id, c.defaultVisible])
+      columnDefs.map((c) => [c.id, c.defaultVisible]),
     );
-    return loadVisibleColumnsFromStorage(projectId, defaultColumns);
+    return loadVisibleColumnsFromStorage(columnsStorageKey, defaultColumns);
   });
   const [colsOpen, setColsOpen] = useState(false);
 
@@ -221,8 +254,8 @@ export default function IssueListView({ projectId }) {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(`teamboard_list_cols_${projectId}`, JSON.stringify(visibleColumns));
-  }, [visibleColumns, projectId]);
+    localStorage.setItem(columnsStorageKey, JSON.stringify(visibleColumns));
+  }, [visibleColumns, columnsStorageKey]);
 
   useEffect(() => {
     if (!colsOpen) return;
@@ -241,10 +274,16 @@ export default function IssueListView({ projectId }) {
     [canEditOrDelete, canUpdateIssueStatus]
   );
 
-  const showActionsColumn = useMemo(
-    () => issues.some((issue) => canOpenEditModal(issue)),
-    [issues, canOpenEditModal]
-  );
+  const showActionsColumn = useMemo(() => {
+    if (variant === 'scrum') {
+      return issues.some(
+        (issue) =>
+          issue.sprintStatus === 'ACTIVE' &&
+          (canOpenEditModal(issue) || canEditOrDelete(issue)),
+      );
+    }
+    return issues.some((issue) => canOpenEditModal(issue));
+  }, [issues, variant, canOpenEditModal, canEditOrDelete]);
 
   const toggleSort = (col) => {
     if (sortCol === col) {
@@ -268,7 +307,11 @@ export default function IssueListView({ projectId }) {
     }
   };
 
-  const col = (id) => visibleColumns[id] ?? true;
+  const col = (id) => {
+    const def = columnDefs.find((c) => c.id === id);
+    if (!def) return false;
+    return visibleColumns[id] ?? def.defaultVisible;
+  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '—';
@@ -300,7 +343,7 @@ export default function IssueListView({ projectId }) {
             {colsOpen && (
               <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Toggle columns</p>
-                {COLUMN_DEFINITIONS.map((c) => (
+                {columnDefs.map((c) => (
                   <label key={c.id} className="flex items-center gap-2 py-1 cursor-pointer text-sm text-gray-700 hover:text-gray-900">
                     <input
                       type="checkbox"
@@ -315,19 +358,37 @@ export default function IssueListView({ projectId }) {
             )}
           </div>
 
-          <IssueFilterButton view="list" align="start" />
+          <IssueFilterButton
+            view={filterView}
+            align="start"
+            sprintFilterOptions={sprintFilterOptions}
+          />
         </div>
 
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Create Task
-        </Button>
+        {variant !== 'scrum' && (
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create Task
+          </Button>
+        )}
       </div>
 
       {issues.length === 0 ? (
         <div className="text-center py-16 text-gray-500 bg-white rounded-lg border border-gray-200">
-          <p className="text-base font-medium mb-1">No tasks yet</p>
-          <p className="text-sm">Create a task to get started.</p>
+          <p className="text-base font-medium mb-1">
+            {listFiltersActive
+              ? EMPTY_STATE_FILTER_ACTIVE_MESSAGE
+              : variant === 'scrum'
+                ? 'No tasks in active or completed sprints'
+                : 'No tasks yet'}
+          </p>
+          {!listFiltersActive && (
+            <p className="text-sm">
+              {variant === 'scrum'
+                ? 'Start a sprint from the Backlog tab or adjust filters.'
+                : 'Create a task to get started.'}
+            </p>
+          )}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
@@ -341,6 +402,22 @@ export default function IssueListView({ projectId }) {
                     className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
                   >
                     <span className="flex items-center gap-1">Name <SortIcon col="name" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
+                {col('sprint') && (
+                  <th
+                    onClick={() => toggleSort('sprint')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Sprint <SortIcon col="sprint" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </th>
+                )}
+                {col('sprintStatus') && (
+                  <th
+                    onClick={() => toggleSort('sprintStatus')}
+                    className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100"
+                  >
+                    <span className="flex items-center gap-1">Sprint Status <SortIcon col="sprintStatus" sortCol={sortCol} sortDir={sortDir} /></span>
                   </th>
                 )}
                 {col('status') && <th className="px-3 py-3 text-left font-semibold text-gray-600 whitespace-nowrap">Status</th>}
@@ -430,6 +507,32 @@ export default function IssueListView({ projectId }) {
                           expandedCell={expandedCell}
                           setExpandedCell={setExpandedCell}
                         />
+                      </td>
+                    )}
+
+                    {col('sprint') && (
+                      <td className="px-3 py-3 whitespace-nowrap text-gray-700">
+                        <TruncatedCell
+                          value={issue.sprintName || null}
+                          issueId={issue.id}
+                          field="sprintName"
+                          expandedCell={expandedCell}
+                          setExpandedCell={setExpandedCell}
+                          emptyLabel="—"
+                        />
+                      </td>
+                    )}
+
+                    {col('sprintStatus') && (
+                      <td className="px-3 py-3 whitespace-nowrap text-gray-700">
+                        {issue.sprintStatus === 'ACTIVE' ||
+                        issue.sprintStatus === 'COMPLETED' ? (
+                          <SprintLifecycleBadge
+                            sprintStatus={issue.sprintStatus}
+                          />
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                     )}
 
@@ -529,7 +632,8 @@ export default function IssueListView({ projectId }) {
                     {showActionsColumn && (
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div className="flex gap-2 flex-wrap">
-                          {canOpenEditModal(issue) && (
+                          {(variant !== 'scrum' || issue.sprintStatus === 'ACTIVE') &&
+                            canOpenEditModal(issue) && (
                             <button
                               type="button"
                               onClick={() => openEditModal(issue)}
@@ -538,7 +642,8 @@ export default function IssueListView({ projectId }) {
                               Edit
                             </button>
                           )}
-                          {canEditOrDelete(issue) && (
+                          {(variant !== 'scrum' || issue.sprintStatus === 'ACTIVE') &&
+                            canEditOrDelete(issue) && (
                             <button
                               type="button"
                               onClick={() => setPendingDeleteIssue(issue)}

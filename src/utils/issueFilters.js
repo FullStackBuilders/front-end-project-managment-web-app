@@ -1,7 +1,7 @@
 import { isToday, isThisWeek, isThisMonth, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { issueSprintId } from './scrumBacklogUtils';
 
-/** Scrum board: show issues from every ACTIVE sprint (not a specific sprint id). */
+/** @deprecated Legacy single-select sentinel; prefer `sprintIds: []` for "all active". */
 export const SCRUM_BOARD_SPRINT_ALL = 'all';
 
 export const INITIAL_FILTERS = {
@@ -11,9 +11,43 @@ export const INITIAL_FILTERS = {
   dueDatePreset: null,  // null | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM'
   dueDateFrom: null,    // ISO date string — only meaningful when dueDatePreset === 'CUSTOM'
   dueDateTo: null,      // ISO date string — only meaningful when dueDatePreset === 'CUSTOM'
-  /** Scrum board only: scope to this sprint id; null = unused (other views). */
-  sprintId: null,
+  /** Scrum board: narrow to these sprint ids; [] = all ACTIVE sprints (no extra filter). */
+  sprintIds: [],
 };
+
+/**
+ * Normalized sprint id list for filtering (handles legacy `sprintId` from older state).
+ * @param {object} filters
+ * @returns {number[]}
+ */
+export function getScrumSprintIdsFilter(filters) {
+  if (Array.isArray(filters.sprintIds) && filters.sprintIds.length > 0) {
+    return [...new Set(filters.sprintIds.map((id) => Number(id)))];
+  }
+  const legacy = filters.sprintId;
+  if (
+    legacy != null &&
+    legacy !== undefined &&
+    legacy !== SCRUM_BOARD_SPRINT_ALL
+  ) {
+    return [Number(legacy)];
+  }
+  return [];
+}
+
+/**
+ * True when the due-date filter should apply and count toward the badge.
+ * Preset quick filters (today / week / month) apply as soon as selected.
+ * Custom applies only when both start and end dates are set.
+ */
+export function isDueDateFilterActive(filters) {
+  const p = filters.dueDatePreset;
+  if (p == null || p === undefined) return false;
+  if (p === 'CUSTOM') {
+    return Boolean(filters.dueDateFrom && filters.dueDateTo);
+  }
+  return true;
+}
 
 /**
  * Returns true when every field in `filters` matches its default (nothing active).
@@ -23,8 +57,8 @@ export function isFiltersEmpty(filters) {
     !filters.assignedToMe &&
     filters.priorities.length === 0 &&
     filters.statuses.length === 0 &&
-    filters.dueDatePreset === null &&
-    (filters.sprintId === null || filters.sprintId === undefined)
+    !isDueDateFilterActive(filters) &&
+    getScrumSprintIdsFilter(filters).length === 0
   );
 }
 
@@ -33,18 +67,19 @@ export function isFiltersEmpty(filters) {
  * Each group counts as 1 regardless of how many values within it are selected.
  */
 export function countActiveFilters(filters) {
-  const sprintScoped =
-    filters.sprintId != null &&
-    filters.sprintId !== undefined &&
-    filters.sprintId !== SCRUM_BOARD_SPRINT_ALL;
+  const sprintScoped = getScrumSprintIdsFilter(filters).length > 0;
   return (
     (filters.assignedToMe ? 1 : 0) +
     (filters.priorities.length > 0 ? 1 : 0) +
     (filters.statuses.length > 0 ? 1 : 0) +
-    (filters.dueDatePreset !== null ? 1 : 0) +
+    (isDueDateFilterActive(filters) ? 1 : 0) +
     (sprintScoped ? 1 : 0)
   );
 }
+
+/** Shared empty state when filters are active but no tasks match. */
+export const EMPTY_STATE_FILTER_ACTIVE_MESSAGE =
+  'No tasks found for applied filter.';
 
 /**
  * Pure filter function — applies all active filters with AND logic.
@@ -57,14 +92,13 @@ export function countActiveFilters(filters) {
 export function applyFilters(issues, filters, currentUserId) {
   if (isFiltersEmpty(filters)) return issues;
 
+  const sprintIdSet = new Set(getScrumSprintIdsFilter(filters));
+
   return issues.filter((issue) => {
-    // ── Sprint (scrum board) ──────────────────────────────────────────────────
-    if (
-      filters.sprintId != null &&
-      filters.sprintId !== undefined &&
-      filters.sprintId !== SCRUM_BOARD_SPRINT_ALL
-    ) {
-      if (issueSprintId(issue) !== filters.sprintId) return false;
+    // ── Sprint (scrum board) — OR within selected ids ─────────────────────────
+    if (sprintIdSet.size > 0) {
+      const sid = issueSprintId(issue);
+      if (sid == null || !sprintIdSet.has(Number(sid))) return false;
     }
 
     // ── Assigned to Me ────────────────────────────────────────────────────────
@@ -83,7 +117,7 @@ export function applyFilters(issues, filters, currentUserId) {
     }
 
     // ── Due Date ──────────────────────────────────────────────────────────────
-    if (filters.dueDatePreset !== null) {
+    if (isDueDateFilterActive(filters)) {
       // Issues without a due date are always excluded when a date filter is active
       if (!issue.dueDate) return false;
 

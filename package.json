@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test:layout": "node --test src/components/scrum/scrumCalendarLayout.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

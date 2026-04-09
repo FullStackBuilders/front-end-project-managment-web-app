@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { selectCalendarFilteredIssues } from '../store/issueSlice';
+import { countActiveFilters, EMPTY_STATE_FILTER_ACTIVE_MESSAGE } from '../utils/issueFilters';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isBefore, isToday } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, Flag } from 'lucide-react';
 import IssueDetailModal from './IssueDetailModal';
@@ -104,6 +105,8 @@ function TaskChip({ task, onClick }) {
 // ── Main CalendarView ─────────────────────────────────────────────────────────
 export default function CalendarView() {
   const issues = useSelector(selectCalendarFilteredIssues);
+  const calendarFilters = useSelector((state) => state.issues.filtersByView.calendar);
+  const calendarFiltersActive = countActiveFilters(calendarFilters) > 0;
 
   const [displayDate, setDisplayDate] = useState(new Date());
   const [dayDetailTasks, setDayDetailTasks] = useState(null);  // array | null
@@ -169,20 +172,8 @@ export default function CalendarView() {
         </button>
       </div>
 
-      {/* Legend */}
-      <div className="mb-4">
-        <div className="flex justify-end mb-2">
-          <IssueFilterButton view="calendar" />
-        </div>
-        <div className="flex items-center gap-4 text-xs text-gray-500">
-          <span className="font-medium text-gray-700">Priority:</span>
-          {Object.entries(CHIP_STYLES).map(([priority, cls]) => (
-            <span key={priority} className={`inline-flex items-center px-2 py-0.5 rounded-full border ${cls}`}>
-              <Flag className="w-3 h-3 mr-1" />
-              {priority}
-            </span>
-          ))}
-        </div>
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
+        <IssueFilterButton view="calendar" align="start" />
       </div>
 
       {/* Day-of-week header row */}
@@ -258,7 +249,9 @@ export default function CalendarView() {
       {/* Empty state for this month */}
       {!monthHasTasks && (
         <p className="text-center text-gray-400 text-sm mt-6">
-          No tasks with due dates in {format(displayDate, 'MMMM yyyy')}.
+          {calendarFiltersActive
+            ? EMPTY_STATE_FILTER_ACTIVE_MESSAGE
+            : `No tasks with due dates in ${format(displayDate, 'MMMM yyyy')}.`}
         </p>
       )}
 
