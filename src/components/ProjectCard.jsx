@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Eye, Trash2, Users, Tag, Calendar } from 'lucide-react';
+import { Eye, Trash2, Users, Tag, Calendar, Pencil } from 'lucide-react';
 import { projectApi } from '../services/projectApi';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 
-export default function ProjectCard({ project, onDelete, currentUserId }) { 
+export default function ProjectCard({ project, onDelete, onEdit, currentUserId }) { 
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const navigate = useNavigate();
@@ -55,7 +55,14 @@ export default function ProjectCard({ project, onDelete, currentUserId }) {
     return baseMessage;
   };
 
-  // NEW: Check if current user is the project owner
+  const canEditProject =
+    project.canEditProject ??
+    (project.myRole === 'OWNER' || project.myRole === 'ADMIN');
+  const canDeleteProject =
+    project.canDeleteProject ??
+    (project.myRole === 'OWNER' || project.myRole === 'ADMIN');
+
+  // Keep explicit owner check for owner badge text.
   const isOwner = currentUserId && project.owner && project.owner.id === currentUserId;
 
   return (
@@ -143,29 +150,44 @@ export default function ProjectCard({ project, onDelete, currentUserId }) {
         <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
           <Button
             onClick={handleView}
-            className={`${isOwner ? 'flex-1' : 'w-full'} flex items-center gap-2`}
+            className={`${(canEditProject || canDeleteProject) ? 'flex-1' : 'w-full'} flex items-center gap-2`}
             size="sm"
           >
             <Eye className="w-4 h-4" />
             Manage Project
           </Button>
           
-          {/* CONDITIONAL DELETE BUTTON - Only show for project owners */}
-          {isOwner && (
-            <Button
-              onClick={handleDeleteClick}
-              variant="outline"
-              size="sm"
-              className="text-red-600 hover:text-red-700 hover:border-red-300 hover:bg-red-50"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
+          {(canEditProject || canDeleteProject) && (
+            <>
+              {canEditProject && (
+                <Button
+                  onClick={() => onEdit?.(project)}
+                  variant="outline"
+                  size="sm"
+                  className="text-blue-600 hover:text-blue-700 hover:border-blue-300 hover:bg-blue-50"
+                  aria-label="Edit project details"
+                  title="Edit Project Details"
+                >
+                  <Pencil className="w-4 h-4" />
+                </Button>
+              )}
+
+              {canDeleteProject && (
+                <Button
+                  onClick={handleDeleteClick}
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700 hover:border-red-300 hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* Delete Confirmation Modal - Only render if user is owner */}
-      {isOwner && (
+      {canDeleteProject && (
         <DeleteConfirmationModal
           showModal={showDeleteModal}
           setShowModal={setShowDeleteModal}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ScrumMasterAssignModal from './scrum/ScrumMasterAssignModal';
 import { Button } from '@/components/ui/button';
 import { Users, Tag, FolderOpen, ChevronDown, ChevronUp, UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -17,12 +18,13 @@ export default function ProjectDetailsCard({ project }) {
   const [isStatusSuccess, setIsStatusSuccess] = useState(false);
   const [showResendModal, setShowResendModal] = useState(false);
   const [resendData, setResendData] = useState(null);
+  const [showScrumMasterModal, setShowScrumMasterModal] = useState(false);
 
   const { user } = useAuth();
 
   if (!project) return null;
 
-  const { name, description, category, tags = [], team = [], owner } = project;
+  const { name, description, category, tags = [], team = [], owner, framework, myRole } = project;
 
   const displayedTags = showAllTags ? tags : tags.slice(0, 3);
   const hasMoreTags = tags.length > 3;
@@ -31,6 +33,18 @@ export default function ProjectDetailsCard({ project }) {
   const hasMoreMembers = team.length > 4;
 
   const isProjectOwner = user && owner && user.userId === owner.id;
+  const canInviteMembers =
+    project.canInviteMembers ??
+    (myRole === 'OWNER' || myRole === 'ADMIN' || (!myRole && isProjectOwner));
+  const canAssignScrumMaster =
+    framework === 'SCRUM' &&
+    (myRole === 'OWNER' || myRole === 'ADMIN' || (!myRole && isProjectOwner));
+
+  const scrumMasterCandidates = (() => {
+    if (!owner) return team;
+    const seen = new Set([owner.id]);
+    return [owner, ...team.filter((m) => !seen.has(m.id))];
+  })();
 
   const handleInviteSent = (response) => {
     setIsStatusSuccess(true);
@@ -155,7 +169,7 @@ export default function ProjectDetailsCard({ project }) {
             </h3>
             <div className="flex items-center gap-2">
               {/* Add Member Button - Only show for project owner */}
-              {isProjectOwner && (
+              {canInviteMembers && (
                 <Button
                   variant="default"
                   size="sm"
@@ -164,6 +178,16 @@ export default function ProjectDetailsCard({ project }) {
                 >
                   <UserPlus className="w-3 h-3 mr-1" />
                   Add Member
+                </Button>
+              )}
+              {canAssignScrumMaster && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowScrumMasterModal(true)}
+                  className="text-xs"
+                >
+                  Scrum Master
                 </Button>
               )}
               {hasMoreMembers && (
@@ -240,6 +264,13 @@ export default function ProjectDetailsCard({ project }) {
         isSuccess={isStatusSuccess}
         message={statusMessage}
         onClose={() => setShowStatusModal(false)}
+      />
+
+      <ScrumMasterAssignModal
+        open={showScrumMasterModal}
+        onClose={() => setShowScrumMasterModal(false)}
+        projectId={project.id}
+        members={scrumMasterCandidates}
       />
     </div>
   );

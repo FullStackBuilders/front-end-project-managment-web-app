@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, ArrowLeft } from 'lucide-react';
 import { projectApi } from '../services/projectApi';
@@ -8,6 +8,8 @@ export default function CreateProjectModal({
   setShowModal,
   onProjectCreated,
   framework,
+  editProject = null,
+  onProjectUpdated,
   onBackToTemplate,
 }) {
   const [projectName, setProjectName] = useState('');
@@ -19,7 +21,14 @@ export default function CreateProjectModal({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
-  const frameworkLabel = framework === 'SCRUM' ? 'SCRUM' : 'KANBAN';
+  const isEditMode = !!editProject;
+  const effectiveFramework = editProject?.framework || framework;
+  const frameworkLabel = effectiveFramework === 'SCRUM' ? 'SCRUM' : 'KANBAN';
+  const titleText = isEditMode ? 'Edit Project Details' : 'Create New Project';
+  const submitText = useMemo(() => {
+    if (creating) return isEditMode ? 'Saving...' : 'Creating...';
+    return isEditMode ? 'Save Changes' : 'Create Project';
+  }, [creating, isEditMode]);
 
   const addTag = () => {
     const trimmedTag = currentTag.trim();
@@ -56,12 +65,27 @@ export default function CreateProjectModal({
     setError('');
   };
 
+  useEffect(() => {
+    if (!showModal) return;
+    if (isEditMode) {
+      setProjectName(editProject.name || '');
+      setDescription(editProject.description || '');
+      setCategory(editProject.category || '');
+      setTags(Array.isArray(editProject.tags) ? editProject.tags : []);
+      setCurrentTag('');
+      setTagWarning('');
+      setError('');
+      return;
+    }
+    resetForm();
+  }, [showModal, isEditMode, editProject]);
+
   const handleClose = () => {
     setShowModal(false);
     resetForm();
   };
 
-  const handleCreateProject = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setCreating(true);
     setError('');
@@ -74,17 +98,28 @@ export default function CreateProjectModal({
     }
     
     try {
-      await projectApi.createProject({
+      const payload = {
         name: projectName,
         description,
         category: trimmedCategory,
         tags,
-        framework,
-      });
+      };
+      if (isEditMode) {
+        await projectApi.updateProject(editProject.id, payload);
+      } else {
+        await projectApi.createProject({
+          ...payload,
+          framework,
+        });
+      }
       handleClose();
-      if (onProjectCreated) onProjectCreated();
+      if (isEditMode) {
+        if (onProjectUpdated) onProjectUpdated();
+      } else if (onProjectCreated) {
+        onProjectCreated();
+      }
     } catch (err) {
-      setError(err.message || 'Failed to create project');
+      setError(err.message || `Failed to ${isEditMode ? 'update' : 'create'} project`);
     } finally {
       setCreating(false);
     }
@@ -96,7 +131,7 @@ export default function CreateProjectModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-3 mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Create New Project</h2>
+          <h2 className="text-xl font-bold text-gray-900">{titleText}</h2>
           <div className="flex items-center gap-2 shrink-0">
             <span className="inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-gray-800">
               {frameworkLabel}
@@ -112,7 +147,7 @@ export default function CreateProjectModal({
           </div>
         </div>
 
-        {onBackToTemplate && (
+        {!isEditMode && onBackToTemplate && (
           <button
             type="button"
             onClick={() => {
@@ -126,7 +161,7 @@ export default function CreateProjectModal({
           </button>
         )}
 
-        <form onSubmit={handleCreateProject} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Project Name *</label>
             <input
@@ -227,9 +262,7 @@ export default function CreateProjectModal({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={creating}>
-              {creating ? 'Creating...' : 'Create Project'}
-            </Button>
+            <Button type="submit" disabled={creating}>{submitText}</Button>
           </div>
         </form>
       </div>

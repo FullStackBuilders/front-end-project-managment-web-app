@@ -4,10 +4,12 @@ import {
   DndContext,
   DragOverlay,
   closestCorners,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -31,6 +33,23 @@ const COLUMNS = [
   { id: "IN_PROGRESS", title: "In Progress", color: "bg-blue-100" },
   { id: "DONE", title: "Done", color: "bg-green-100" },
 ];
+
+const COLUMN_ID_SET = new Set(COLUMNS.map((c) => c.id));
+
+/**
+ * Prefer the target under the pointer (fixes empty column space and avoids
+ * closestCorners picking a neighbouring column e.g. Done instead of In Progress).
+ */
+function kanbanCollisionDetection(args) {
+  const pointerHits = pointerWithin(args);
+  if (pointerHits.length > 0) {
+    const overCard = pointerHits.find((h) => !COLUMN_ID_SET.has(String(h.id)));
+    if (overCard) return [overCard];
+    const overColumn = pointerHits.find((h) => COLUMN_ID_SET.has(String(h.id)));
+    if (overColumn) return [overColumn];
+  }
+  return closestCorners(args);
+}
 
 function SortableIssueCard({ issue, projectId, onEditIssue }) {
   const {
@@ -73,7 +92,7 @@ function SortableIssueCard({ issue, projectId, onEditIssue }) {
 }
 
 function DroppableColumn({ column, issues, projectId, onCreateIssue, onEditIssue, showCreate }) {
-  const { setNodeRef, isOver } = useSortable({
+  const { setNodeRef, isOver } = useDroppable({
     id: column.id,
     data: {
       type: "column",
@@ -82,8 +101,8 @@ function DroppableColumn({ column, issues, projectId, onCreateIssue, onEditIssue
   });
 
   return (
-    <div className="flex flex-col">
-      <div className={`${column.color} rounded-t-lg p-4 border-b`}>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className={`${column.color} shrink-0 rounded-t-lg p-4 border-b`}>
         <div className="flex items-center justify-between">
           <h3 className="font-medium text-gray-800">{column.title}</h3>
           <span className="text-xs font-medium text-gray-600 bg-white px-2 py-1 rounded-full">
@@ -105,7 +124,7 @@ function DroppableColumn({ column, issues, projectId, onCreateIssue, onEditIssue
 
       <div
         ref={setNodeRef}
-        className={`flex-1 min-h-[400px] p-4 rounded-b-lg border-l border-r border-b transition-colors ${
+        className={`flex min-h-[min(420px,50vh)] flex-1 flex-col p-4 rounded-b-lg border-l border-r border-b transition-colors ${
           isOver ? "bg-blue-50 border-blue-300" : "bg-gray-50"
         }`}
       >
@@ -113,7 +132,7 @@ function DroppableColumn({ column, issues, projectId, onCreateIssue, onEditIssue
           items={issues?.map((issue) => issue.id) || []}
           strategy={verticalListSortingStrategy}
         >
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             {issues?.map((issue) => (
               <SortableIssueCard
                 key={issue.id}
@@ -281,12 +300,12 @@ export function KanbanBoardContent({
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={kanbanCollisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
         >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid min-h-[min(520px,55vh)] grid-cols-1 items-stretch gap-6 md:grid-cols-3">
             {COLUMNS.map((column) => (
               <DroppableColumn
                 key={column.id}

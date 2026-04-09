@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { Button } from '@/components/ui/button';
 import { X, AlertCircle, Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +28,8 @@ export default function EditTaskModal({
 }) {
   const dispatch = useDispatch();
   const { isCreator, isProjectOwner, canUpdateIssueStatus } = useAuth();
+  const { currentProject } = useSelector((state) => state.project);
+  const myRole = currentProject?.myRole ?? null;
 
   const [formData, setFormData] = useState({
     title: '',
@@ -41,10 +43,14 @@ export default function EditTaskModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const canEditFullDetails = useMemo(
-    () => isCreator(issue?.createdById) || isProjectOwner(issue?.projectOwnerId),
-    [issue, isCreator, isProjectOwner]
-  );
+  const canEditFullDetails = useMemo(() => {
+    if (!issue) return false;
+    const canAdministerAllTasks =
+      myRole === 'OWNER' ||
+      myRole === 'ADMIN' ||
+      (!myRole && isProjectOwner(issue.projectOwnerId));
+    return isCreator(issue.createdById) || canAdministerAllTasks;
+  }, [issue, myRole, isCreator, isProjectOwner]);
 
   const isAssigneeOnlyEditor = useMemo(() => {
     if (!issue || canEditFullDetails) return false;

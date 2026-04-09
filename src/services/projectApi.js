@@ -85,6 +85,27 @@ export const projectApi = {
     }
   },
 
+  getMyMembership: async (projectId) => {
+    try {
+      return await ApiService.authenticatedRequest(
+        `/api/projects/${projectId}/membership/me`,
+      );
+    } catch (error) {
+      console.error('Error fetching project membership:', error);
+      throw new Error(error.message || 'Failed to fetch membership');
+    }
+  },
+
+  updateMemberRole: async (projectId, memberUserId, role) => {
+    return ApiService.authenticatedRequest(
+      `/api/projects/${projectId}/members/m/${memberUserId}/role`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+      },
+    );
+  },
+
   // Get chat by project ID
   getChatByProjectId: async (projectId) => {
     try {

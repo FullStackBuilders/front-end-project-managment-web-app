@@ -33,8 +33,12 @@ export default function Dashboard() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedFramework, setSelectedFramework] = useState(null);
+  const [editingProject, setEditingProject] = useState(null);
 
-  const openCreateProjectFlow = () => setShowTemplateModal(true);
+  const openCreateProjectFlow = () => {
+    setEditingProject(null);
+    setShowTemplateModal(true);
+  };
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [joinedProjectName, setJoinedProjectName] = useState("");
@@ -214,10 +218,19 @@ export default function Dashboard() {
     fetchProjects();
   };
 
+  const handleProjectUpdated = () => {
+    fetchProjects();
+  };
+
   const handleProjectDelete = (deletedProjectId) => {
     setProjects((prev) =>
       prev.filter((project) => project.id !== deletedProjectId),
     );
+  };
+
+  const handleProjectEdit = (project) => {
+    setEditingProject(project);
+    setShowCreateModal(true);
   };
 
   const handleSuccessModalClose = () => {
@@ -266,6 +279,7 @@ export default function Dashboard() {
               key={project.id}
               project={project}
               onDelete={handleProjectDelete}
+              onEdit={handleProjectEdit}
               currentUserId={getCurrentUserIdSafe()}
             />
           ))}
@@ -335,20 +349,24 @@ export default function Dashboard() {
             setShowCreateModal(true);
           }}
         />
-        {showCreateModal && selectedFramework && (
+        {showCreateModal && (selectedFramework || editingProject) && (
           <CreateProjectModal
             showModal={showCreateModal}
             setShowModal={(open) => {
               if (!open) {
                 setShowCreateModal(false);
                 setSelectedFramework(null);
+                setEditingProject(null);
               }
             }}
             onProjectCreated={handleProjectCreated}
-            framework={selectedFramework}
+            onProjectUpdated={handleProjectUpdated}
+            framework={selectedFramework || editingProject?.framework}
+            editProject={editingProject}
             onBackToTemplate={() => {
               setShowCreateModal(false);
               setSelectedFramework(null);
+              setEditingProject(null);
               setShowTemplateModal(true);
             }}
           />
@@ -488,20 +506,24 @@ export default function Dashboard() {
           setShowCreateModal(true);
         }}
       />
-      {showCreateModal && selectedFramework && (
+      {showCreateModal && (selectedFramework || editingProject) && (
         <CreateProjectModal
           showModal={showCreateModal}
           setShowModal={(open) => {
             if (!open) {
               setShowCreateModal(false);
               setSelectedFramework(null);
+              setEditingProject(null);
             }
           }}
           onProjectCreated={handleProjectCreated}
-          framework={selectedFramework}
+          onProjectUpdated={handleProjectUpdated}
+          framework={selectedFramework || editingProject?.framework}
+          editProject={editingProject}
           onBackToTemplate={() => {
             setShowCreateModal(false);
             setSelectedFramework(null);
+            setEditingProject(null);
             setShowTemplateModal(true);
           }}
         />

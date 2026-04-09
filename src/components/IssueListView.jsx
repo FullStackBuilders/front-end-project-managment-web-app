@@ -264,14 +264,22 @@ export default function IssueListView({
     return () => document.removeEventListener('mousedown', handler);
   }, [colsOpen]);
 
-  const canEditOrDelete = useCallback(
-    (issue) => isCreator(issue.createdById) || isProjectOwner(issue.projectOwnerId),
-    [isCreator, isProjectOwner]
+  const myRole = currentProject?.myRole ?? null;
+
+  const canDeleteTask = useCallback(
+    (issue) => {
+      const canAdministerAllTasks =
+        myRole === 'OWNER' ||
+        myRole === 'ADMIN' ||
+        (!myRole && isProjectOwner(issue.projectOwnerId));
+      return isCreator(issue.createdById) || canAdministerAllTasks;
+    },
+    [myRole, isCreator, isProjectOwner]
   );
 
   const canOpenEditModal = useCallback(
-    (issue) => canEditOrDelete(issue) || canUpdateIssueStatus(issue),
-    [canEditOrDelete, canUpdateIssueStatus]
+    (issue) => canDeleteTask(issue) || canUpdateIssueStatus(issue),
+    [canDeleteTask, canUpdateIssueStatus]
   );
 
   const showActionsColumn = useMemo(() => {
@@ -279,11 +287,11 @@ export default function IssueListView({
       return issues.some(
         (issue) =>
           issue.sprintStatus === 'ACTIVE' &&
-          (canOpenEditModal(issue) || canEditOrDelete(issue)),
+          (canOpenEditModal(issue) || canDeleteTask(issue)),
       );
     }
     return issues.some((issue) => canOpenEditModal(issue));
-  }, [issues, variant, canOpenEditModal, canEditOrDelete]);
+  }, [issues, variant, canOpenEditModal, canDeleteTask]);
 
   const toggleSort = (col) => {
     if (sortCol === col) {
@@ -643,7 +651,7 @@ export default function IssueListView({
                             </button>
                           )}
                           {(variant !== 'scrum' || issue.sprintStatus === 'ACTIVE') &&
-                            canEditOrDelete(issue) && (
+                            canDeleteTask(issue) && (
                             <button
                               type="button"
                               onClick={() => setPendingDeleteIssue(issue)}

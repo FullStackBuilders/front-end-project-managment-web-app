@@ -6,8 +6,15 @@ export const fetchProjectById = createAsyncThunk(
   'project/fetchById',
   async (projectId, { rejectWithValue }) => {
     try {
-      const response = await projectApi.getProjectById(projectId);
-      return response;
+      const project = await projectApi.getProjectById(projectId);
+      let myRole = null;
+      try {
+        const mem = await projectApi.getMyMembership(projectId);
+        myRole = mem?.role ?? null;
+      } catch {
+        myRole = null;
+      }
+      return { ...project, myRole };
     } catch (error) {
       return rejectWithValue(error.message);
     }

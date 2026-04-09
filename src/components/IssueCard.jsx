@@ -31,6 +31,7 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
   const dispatch = useDispatch();
   const { isCreator, isProjectOwner, canAssignIssue, canUpdateIssueStatus } = useAuth();
   const { currentProject } = useSelector((state) => state.project);
+  const myRole = currentProject?.myRole ?? null;
 
   const projectMembersForAssignee = useMemo(() => {
     const owner = currentProject?.owner;
@@ -40,9 +41,15 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
     return [owner, ...team.filter((m) => !seen.has(m.id))];
   }, [currentProject]);
 
-  const canEditOrDelete = isCreator(issue.createdById) || isProjectOwner(issue.projectOwnerId);
-  const canOpenEditModal = canEditOrDelete || canUpdateIssueStatus(issue);
-  const canAssign = canAssignIssue(issue);
+  const canAdministerAllTasks =
+    myRole === "OWNER" ||
+    myRole === "ADMIN" ||
+    (!myRole && isProjectOwner(issue.projectOwnerId));
+  const canDeleteTask =
+    isCreator(issue.createdById) || canAdministerAllTasks;
+  const canOpenEditModal =
+    canDeleteTask || canUpdateIssueStatus(issue);
+  const canAssign = canAssignIssue(issue) || myRole === "OWNER" || myRole === "ADMIN";
 
   const handleDeleteClick = (e) => {
     e.preventDefault();
@@ -216,7 +223,7 @@ export default function IssueCard({ issue, onEditIssue, ...dragProps }) {
               </Button>
             )}
 
-            {canEditOrDelete && (
+            {canDeleteTask && (
               <Button
                 variant="ghost"
                 size="sm"
