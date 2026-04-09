@@ -339,15 +339,15 @@ export const selectScrumListFilteredIssues = createSelector(
   },
 );
 
-// ── Analytics Selectors ───────────────────────────────────────────────────────
+// ── Issue summary selectors (Kanban Summary tab + KanbanMetrics) ───────────────
 
 const selectAllIssues = (state) => state.issues.issues;
 
 // Exported for components that need raw issue data alongside local state (e.g. KanbanMetrics)
 export const selectAllIssuesRaw = selectAllIssues;
 
-// Summary counts used by the Analytics tab summary cards.
-export const selectAnalyticsSummary = createSelector(
+// Summary counts used by the Summary tab cards and KanbanMetrics.
+export const selectIssueSummary = createSelector(
   [selectAllIssues],
   (issues) => {
     const total      = issues.length;
@@ -390,6 +390,144 @@ export const selectPriorityDistribution = createSelector(
       { name: 'Low',    value: low,    color: '#22c55e' },
     ];
   }
+);
+
+const ASSIGNEE_CHART_COLORS = [
+  '#3b82f6',
+  '#8b5cf6',
+  '#14b8a6',
+  '#ec4899',
+  '#f59e0b',
+  '#6366f1',
+  '#0ea5e9',
+  '#a855f7',
+];
+
+const UNASSIGNED_BUCKET_KEY = '__unassigned__';
+
+function issueAssigneeId(issue) {
+  if (issue == null) return null;
+  if (issue.assigneeId != null && issue.assigneeId !== '') {
+    const n = Number(issue.assigneeId);
+    return Number.isNaN(n) ? null : n;
+  }
+  if (issue.assignee?.id != null) {
+    const n = Number(issue.assignee.id);
+    return Number.isNaN(n) ? null : n;
+  }
+  return null;
+}
+
+function assigneeColorForUserId(idKey) {
+  const s = String(idKey);
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return ASSIGNEE_CHART_COLORS[Math.abs(h) % ASSIGNEE_CHART_COLORS.length];
+}
+
+function memberDisplayName(user) {
+  if (!user) return '';
+  const name = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
+  if (name) return name;
+  if (user.email) return user.email;
+  return user.id != null ? `User ${user.id}` : '';
+}
+
+/** Horizontal bar rows: project members (non-zero), orphan assignees, Unassigned last. */
+export const selectAssigneeDistribution = createSelector(
+  [selectAllIssues, (state) => state.project.currentProject],
+  (issues, currentProject) => {
+    const total = issues.length;
+    if (total === 0) {
+      return { data: [], total: 0 };
+    }
+
+    const counts = new Map();
+    const idToLabel = new Map();
+
+    for (const issue of issues) {
+      const aid = issueAssigneeId(issue);
+      if (aid == null) {
+        counts.set(UNASSIGNED_BUCKET_KEY, (counts.get(UNASSIGNED_BUCKET_KEY) || 0) + 1);
+      } else {
+        const key = String(aid);
+        counts.set(key, (counts.get(key) || 0) + 1);
+        if (!idToLabel.has(key) && issue.assigneeName) {
+          idToLabel.set(key, String(issue.assigneeName).trim());
+        }
+      }
+    }
+
+    const memberIdsOrdered = [];
+    const memberLabelById = new Map();
+    if (currentProject) {
+      const owner = currentProject.owner;
+      const team = currentProject.team || [];
+      if (owner?.id != null) {
+        const oid = String(owner.id);
+        memberIdsOrdered.push(oid);
+        memberLabelById.set(oid, memberDisplayName(owner));
+      }
+      const seenOwner = new Set(memberIdsOrdered);
+      for (const m of team) {
+        if (m?.id == null) continue;
+        const mid = String(m.id);
+        if (seenOwner.has(mid)) continue;
+        seenOwner.add(mid);
+        memberIdsOrdered.push(mid);
+        memberLabelById.set(mid, memberDisplayName(m));
+      }
+    }
+
+    const data = [];
+    const includedAssigneeKeys = new Set();
+
+    for (const mid of memberIdsOrdered) {
+      const c = counts.get(mid) || 0;
+      if (c <= 0) continue;
+      data.push({
+        rowKey: `member-${mid}`,
+        name: memberLabelById.get(mid) || idToLabel.get(mid) || `User ${mid}`,
+        value: c,
+        color: assigneeColorForUserId(mid),
+        pct: Math.round((c / total) * 100),
+      });
+      includedAssigneeKeys.add(mid);
+    }
+
+    const orphanKeys = [...counts.keys()].filter(
+      (k) => k !== UNASSIGNED_BUCKET_KEY && !includedAssigneeKeys.has(k) && (counts.get(k) || 0) > 0,
+    );
+    orphanKeys.sort((a, b) =>
+      (idToLabel.get(a) || a).localeCompare(idToLabel.get(b) || b, undefined, { sensitivity: 'base' }),
+    );
+    for (const k of orphanKeys) {
+      const c = counts.get(k) || 0;
+      data.push({
+        rowKey: `orphan-${k}`,
+        name: idToLabel.get(k) || `User ${k}`,
+        value: c,
+        color: assigneeColorForUserId(k),
+        pct: Math.round((c / total) * 100),
+      });
+      includedAssigneeKeys.add(k);
+    }
+
+    const unassigned = counts.get(UNASSIGNED_BUCKET_KEY) || 0;
+    if (unassigned > 0) {
+      data.push({
+        rowKey: 'unassigned',
+        name: 'Unassigned',
+        value: unassigned,
+        color: '#9ca3af',
+        pct: Math.round((unassigned / total) * 100),
+      });
+    }
+
+    return { data, total };
+  },
 );
 
 // Counts for the optional due-date cards (excludes completed tasks).

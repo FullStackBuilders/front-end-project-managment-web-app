@@ -11,7 +11,7 @@ import {
   startOfWeek, startOfMonth, startOfDay, endOfDay,
   subDays, eachDayOfInterval, format, isWithinInterval,
 } from 'date-fns';
-import { selectAllIssuesRaw, selectAnalyticsSummary } from '../store/issueSlice';
+import { selectAllIssuesRaw, selectIssueSummary } from '../store/issueSlice';
 import { Activity } from 'lucide-react';
 
 // ── Time range constants ─────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ function MetricLabel({ label, value, unit, color }) {
 
 export default function KanbanMetrics() {
   const issues  = useSelector(selectAllIssuesRaw);
-  const summary = useSelector(selectAnalyticsSummary);
+  const summary = useSelector(selectIssueSummary);
 
   const [timeRange, setTimeRange] = useState('LAST_7_DAYS');
 

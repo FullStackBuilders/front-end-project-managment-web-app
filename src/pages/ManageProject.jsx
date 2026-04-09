@@ -7,11 +7,20 @@ import ChatBox from '../components/ChatBox';
 import KanbanBoard from '../components/KanbanBoard';
 import IssueListView from '../components/IssueListView';
 import CalendarView from '../components/CalendarView';
-import ProjectAnalytics from '../components/ProjectAnalytics';
+import ProjectSummary from '../components/ProjectSummary';
+import KanbanMetrics from '../components/KanbanMetrics';
 import ScrumProjectWorkspace from '../components/scrum/ScrumProjectWorkspace';
 import { fetchProjectById } from '../store/projectSlice';
 import { fetchIssuesByProject, clearIssues } from '../store/issueSlice';
 import { fetchChatMessages } from '../store/chatSlice';
+
+const KANBAN_WORKSPACE_TABS = [
+  { id: 'board', label: 'Board' },
+  { id: 'list', label: 'List' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'summary', label: 'Summary' },
+  { id: 'metrics', label: 'Metrics' },
+];
 
 export default function ManageProject() {
   const { projectId } = useParams();
@@ -141,17 +150,17 @@ export default function ManageProject() {
           <div className="mt-8">
             <div className="flex items-center justify-between mb-4 border-b border-gray-200">
               <div className="flex gap-1">
-                {['board', 'list', 'calendar', 'analytics'].map(tab => (
+                {KANBAN_WORKSPACE_TABS.map(({ id, label }) => (
                   <button
-                    key={tab}
+                    key={id}
                     type="button"
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors cursor-pointer
-                      ${activeTab === tab
+                    onClick={() => setActiveTab(id)}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer
+                      ${activeTab === id
                         ? 'border-primary text-primary'
                         : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                   >
-                    {tab}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -160,7 +169,8 @@ export default function ManageProject() {
             {activeTab === 'board'     && <KanbanBoard projectId={projectId} />}
             {activeTab === 'list'      && <IssueListView projectId={projectId} />}
             {activeTab === 'calendar'  && <CalendarView />}
-            {activeTab === 'analytics' && <ProjectAnalytics />}
+            {activeTab === 'summary' && <ProjectSummary />}
+            {activeTab === 'metrics' && <KanbanMetrics />}
           </div>
         )}
       </div>

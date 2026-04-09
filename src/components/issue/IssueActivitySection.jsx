@@ -7,7 +7,7 @@ const TABS = [
 ];
 
 /**
- * KanbanMetrics-style segmented tabs + timeline list (All / History) or comments slot.
+ * Segmented tabs + timeline list (All / History) or comments slot.
  */
 export default function IssueActivitySection({
   activeTab,

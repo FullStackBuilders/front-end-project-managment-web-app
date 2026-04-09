@@ -123,6 +123,25 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
         (m) => Number(m.id) === Number(user.userId),
       ));
 
+  const canMoveIssueBetweenBacklogAndActiveSprint = useCallback(
+    (issue) => {
+      if (!issue) return false;
+      if (canManageSprintLifecycle) return true;
+      const currentUserId = Number(user?.userId);
+      if (!currentUserId) return false;
+      const isCreatorIssue = isCreator(issue.createdById);
+      const assigneeId =
+        issue.assigneeId != null
+          ? Number(issue.assigneeId)
+          : issue.assignee?.id != null
+            ? Number(issue.assignee.id)
+            : null;
+      const isAssigneeIssue = assigneeId != null && assigneeId === currentUserId;
+      return isCreatorIssue || isAssigneeIssue;
+    },
+    [canManageSprintLifecycle, user?.userId, isCreator],
+  );
+
   const [sprints, setSprints] = useState([]);
   const [sprintsLoading, setSprintsLoading] = useState(true);
   const [sprintsError, setSprintsError] = useState(null);
@@ -173,9 +192,12 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
   const eligibleSprintsForDropdown = useMemo(
     () =>
       sprints.filter(
-        (s) => s.status === "INACTIVE" || s.status === "ACTIVE",
+        (s) =>
+          canManageSprintLifecycle
+            ? s.status === "INACTIVE" || s.status === "ACTIVE"
+            : s.status === "ACTIVE",
       ),
-    [sprints],
+    [sprints, canManageSprintLifecycle],
   );
 
   /** INACTIVE + ACTIVE only; COMPLETED sprints stay in DB but are not listed in backlog UI. */
@@ -195,9 +217,15 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
     return map;
   }, [issues, sprintsVisibleInBacklog]);
 
+  const selectableBacklogIssues = useMemo(
+    () => backlogIssues.filter((i) => canMoveIssueBetweenBacklogAndActiveSprint(i)),
+    [backlogIssues, canMoveIssueBetweenBacklogAndActiveSprint],
+  );
+
   const selectedBacklogTasks = useMemo(
-    () => backlogIssues.filter((i) => selectedIds.has(i.id)),
-    [backlogIssues, selectedIds],
+    () =>
+      selectableBacklogIssues.filter((i) => selectedIds.has(i.id)),
+    [selectableBacklogIssues, selectedIds],
   );
 
   const selectedEligibleForBacklog = useMemo(
@@ -205,16 +233,17 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
       issues.filter(
         (i) =>
           selectedIds.has(i.id) &&
+          canMoveIssueBetweenBacklogAndActiveSprint(i) &&
           issueSprintId(i) != null &&
           !isIssueInCompletedSprint(i, sprints),
       ),
-    [issues, selectedIds, sprints],
+    [issues, selectedIds, sprints, canMoveIssueBetweenBacklogAndActiveSprint],
   );
 
   const canAddToSprint =
-    canManageSprintLifecycle && selectedBacklogTasks.length > 0;
+    isProjectMember && selectedBacklogTasks.length > 0;
   const canAddToBacklog =
-    canManageSprintLifecycle && selectedEligibleForBacklog.length > 0;
+    isProjectMember && selectedEligibleForBacklog.length > 0;
 
   /** Single vs multi sprint; whether every task in that sprint is selected (header or row checkboxes). */
   const backlogMoveSummary = useMemo(() => {
@@ -253,9 +282,9 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
   }, [selectedEligibleForBacklog, issues, sprints]);
 
   const allBacklogSelected =
-    backlogIssues.length > 0 &&
-    backlogIssues.every((i) => selectedIds.has(i.id));
-  const someBacklogSelected = backlogIssues.some((i) => selectedIds.has(i.id));
+    selectableBacklogIssues.length > 0 &&
+    selectableBacklogIssues.every((i) => selectedIds.has(i.id));
+  const someBacklogSelected = selectableBacklogIssues.some((i) => selectedIds.has(i.id));
 
   const toggleSelect = useCallback((id) => {
     setSelectedIds((prev) => {
@@ -270,35 +299,40 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
     (checked) => {
       setSelectedIds((prev) => {
         const n = new Set(prev);
-        backlogIssues.forEach((i) => {
+        selectableBacklogIssues.forEach((i) => {
           if (checked) n.add(i.id);
           else n.delete(i.id);
         });
         return n;
       });
     },
-    [backlogIssues],
+    [selectableBacklogIssues],
   );
 
   const onSprintSelectAll = useCallback((tasks, sprintCompleted, checked) => {
-    if (!canManageSprintLifecycle || sprintCompleted) return;
+    if (sprintCompleted) return;
+    const selectableTasks = tasks.filter((i) => canMoveIssueBetweenBacklogAndActiveSprint(i));
+    if (selectableTasks.length === 0) return;
     setSelectedIds((prev) => {
       const n = new Set(prev);
-      tasks.forEach((i) => {
+      selectableTasks.forEach((i) => {
         if (checked) n.add(i.id);
         else n.delete(i.id);
       });
       return n;
     });
-  }, [canManageSprintLifecycle]);
+  }, [canMoveIssueBetweenBacklogAndActiveSprint]);
 
   const allSprintTasksSelected = (tasks, sprintCompleted) =>
     !sprintCompleted &&
-    canManageSprintLifecycle &&
-    tasks.length > 0 &&
-    tasks.every((t) => selectedIds.has(t.id));
+    tasks.some((t) => canMoveIssueBetweenBacklogAndActiveSprint(t)) &&
+    tasks
+      .filter((t) => canMoveIssueBetweenBacklogAndActiveSprint(t))
+      .every((t) => selectedIds.has(t.id));
   const someSprintTasksSelected = (tasks) =>
-    tasks.some((t) => selectedIds.has(t.id));
+    tasks
+      .filter((t) => canMoveIssueBetweenBacklogAndActiveSprint(t))
+      .some((t) => selectedIds.has(t.id));
 
   const allMembers = useMemo(() => {
     const owner = currentProject?.owner;
@@ -711,7 +745,7 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
       <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Backlog</h3>
-          {canManageSprintLifecycle && (
+          {isProjectMember && (
             <div className="flex flex-col items-stretch sm:items-end gap-1 shrink-0">
               <div className="flex flex-wrap items-center gap-2 justify-end">
                 <Button
@@ -724,18 +758,13 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                 </Button>
               </div>
               <p className="text-xs text-gray-500 text-right max-w-[240px] sm:max-w-none">
-                Select tasks, then click Add to sprint.
+                {canManageSprintLifecycle
+                  ? "Select tasks, then click Add to sprint."
+                  : "Select your own or assigned tasks, then click Add to sprint."}
               </p>
             </div>
           )}
         </div>
-
-        {!canManageSprintLifecycle && (
-          <p className="text-sm text-gray-600 mb-3 rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
-            Only a project owner, admin, or Scrum Master can move tasks between the backlog and
-            sprints in bulk. You can still view tasks here.
-          </p>
-        )}
 
         {backlogIssues.length === 0 ? (
           <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50/80 min-h-[180px] p-4 flex flex-col items-center justify-center text-center">
@@ -743,7 +772,9 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
               No tasks in the backlog yet.
             </p>
             <p className="text-sm text-gray-500 mb-4 max-w-md">
-              Create a task to plan work before you add it to a sprint.
+              {myRole === "MEMBER"
+                ? "Create a task to plan work before you add it to an active sprint."
+                : "Create a task to plan work before you add it to a sprint."}
             </p>
             {isProjectMember && (
               <Button
@@ -774,11 +805,11 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className={TH_SELECT_COL}>
-                      {canManageSprintLifecycle ? (
+                      {isProjectMember ? (
                         <BacklogSelectAllCheckbox
                           checked={allBacklogSelected}
                           indeterminate={someBacklogSelected && !allBacklogSelected}
-                          disabled={backlogIssues.length === 0}
+                          disabled={selectableBacklogIssues.length === 0}
                           onChange={onBacklogSelectAll}
                         />
                       ) : (
@@ -816,15 +847,24 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                         className={overdue ? "bg-red-50/60" : "bg-white hover:bg-gray-50/80"}
                       >
                         <td className={TD_SELECT_COL}>
-                          {canManageSprintLifecycle ? (
+                          {isProjectMember ? (
                             <div className={TD_SELECT_INNER}>
-                              <input
-                                type="checkbox"
-                                className={TASK_CHECKBOX_CLASS}
-                                checked={selectedIds.has(issue.id)}
-                                onChange={() => toggleSelect(issue.id)}
-                                aria-label={`Select ${issue.title}`}
-                              />
+                              {canMoveIssueBetweenBacklogAndActiveSprint(issue) ? (
+                                <input
+                                  type="checkbox"
+                                  className={TASK_CHECKBOX_CLASS}
+                                  checked={selectedIds.has(issue.id)}
+                                  onChange={() => toggleSelect(issue.id)}
+                                  aria-label={`Select ${issue.title}`}
+                                />
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  disabled
+                                  className={TASK_CHECKBOX_DISABLED_CLASS}
+                                  aria-label="Selection disabled"
+                                />
+                              )}
                             </div>
                           ) : (
                             <div className={TD_SELECT_INNER}>
@@ -891,7 +931,7 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
       <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Sprints</h3>
-          {canManageSprintLifecycle && (
+          {isProjectMember && (
             <div className="flex flex-wrap gap-2 justify-end shrink-0">
               <Button
                 type="button"
@@ -901,10 +941,12 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
               >
                 Add to backlog
               </Button>
-              <Button type="button" variant="outline" onClick={() => setShowSprintModal(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create sprint
-              </Button>
+              {canManageSprintLifecycle && (
+                <Button type="button" variant="outline" onClick={() => setShowSprintModal(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create sprint
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -1006,14 +1048,18 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                           <thead className="bg-gray-50">
                             <tr>
                               <th className={TH_SELECT_COL}>
-                                {canManageSprintLifecycle ? (
+                                {isProjectMember ? (
                                   <SprintSelectAllCheckbox
                                     checked={allSprintTasksSelected(tasks, false)}
                                     indeterminate={
                                       someSprintTasksSelected(tasks) &&
                                       !allSprintTasksSelected(tasks, false)
                                     }
-                                    disabled={tasks.length === 0}
+                                    disabled={
+                                      tasks.filter((t) =>
+                                        canMoveIssueBetweenBacklogAndActiveSprint(t),
+                                      ).length === 0
+                                    }
                                     onChange={(c) =>
                                       onSprintSelectAll(tasks, false, c)
                                     }
@@ -1047,7 +1093,8 @@ export default function ScrumBacklogView({ projectId, onSprintStarted }) {
                           <tbody className="divide-y divide-gray-100">
                             {tasks.map((issue) => {
                               const overdue = isIssueOverdue(issue);
-                              const rowDisabled = !canManageSprintLifecycle;
+                              const rowDisabled =
+                                !canMoveIssueBetweenBacklogAndActiveSprint(issue);
                               return (
                                 <tr
                                   key={issue.id}

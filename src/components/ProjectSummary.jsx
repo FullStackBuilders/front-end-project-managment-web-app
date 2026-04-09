@@ -5,13 +5,13 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import {
-  selectAnalyticsSummary,
+  selectIssueSummary,
   selectStatusDistribution,
   selectPriorityDistribution,
   selectDueDateSummary,
+  selectAssigneeDistribution,
 } from '../store/issueSlice';
 import { BarChart2, SlidersHorizontal } from 'lucide-react';
-import KanbanMetrics from './KanbanMetrics';
 
 // ── Core card configuration (always visible) ─────────────────────────────────
 
@@ -30,14 +30,28 @@ const OPTIONAL_CARDS = [
   { id: 'dueThisMonth', label: 'Due This Month', border: 'border-l-violet-500', text: 'text-violet-600' },
 ];
 
-const STORAGE_KEY = 'analytics:visibleOptionals';
+const STORAGE_KEY = 'summary:visibleOptionals';
+const LEGACY_STORAGE_KEY = 'analytics:visibleOptionals';
 
 const DEFAULT_VISIBILITY = { dueToday: true, dueThisWeek: true, dueThisMonth: true };
 
 function readStoredVisibility() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? { ...DEFAULT_VISIBILITY, ...JSON.parse(stored) } : DEFAULT_VISIBILITY;
+    if (stored) {
+      return { ...DEFAULT_VISIBILITY, ...JSON.parse(stored) };
+    }
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      const merged = { ...DEFAULT_VISIBILITY, ...JSON.parse(legacy) };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      } catch {
+        /* ignore */
+      }
+      return merged;
+    }
+    return DEFAULT_VISIBILITY;
   } catch {
     return DEFAULT_VISIBILITY;
   }
@@ -94,7 +108,7 @@ function EmptyState() {
       <BarChart2 className="w-14 h-14 text-gray-300 mb-4" />
       <h3 className="text-base font-medium text-gray-500 mb-1">No tasks yet</h3>
       <p className="text-sm text-gray-400">
-        Create tasks in the Board or List view and analytics will appear here.
+        Create tasks in the Board or List view and your summary will appear here.
       </p>
     </div>
   );
@@ -102,11 +116,12 @@ function EmptyState() {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ProjectAnalytics() {
-  const summary      = useSelector(selectAnalyticsSummary);
+export default function ProjectSummary() {
+  const summary      = useSelector(selectIssueSummary);
   const statusData   = useSelector(selectStatusDistribution);
   const priorityData = useSelector(selectPriorityDistribution);
   const dueDates     = useSelector(selectDueDateSummary);
+  const assigneeDistribution = useSelector(selectAssigneeDistribution);
 
   const statusTotal   = statusData.reduce((sum, d) => sum + d.value, 0);
   const priorityTotal = priorityData.reduce((sum, d) => sum + d.value, 0);
@@ -221,52 +236,120 @@ export default function ProjectAnalytics() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left column: Status, then assignee distribution */}
+          <div className="space-y-6 min-w-0">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Task Status Distribution</h3>
+              <div className="flex flex-col sm:flex-row items-center gap-6">
+                <div className="w-full sm:w-48 h-48 flex-shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={statusData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius="55%"
+                        outerRadius="80%"
+                        paddingAngle={statusData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
+                        dataKey="value"
+                        strokeWidth={0}
+                      >
+                        {statusData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value) => [
+                          `${value} (${statusTotal > 0 ? Math.round((value / statusTotal) * 100) : 0}%)`,
+                        ]}
+                        contentStyle={{
+                          borderRadius: '6px',
+                          border: '1px solid #e5e7eb',
+                          fontSize: '13px',
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex-1 w-full">
+                  <DonutLegend
+                    payload={statusData.map((d) => ({ value: d.name, color: d.color, payload: d }))}
+                    total={statusTotal}
+                  />
+                </div>
+              </div>
+            </div>
 
-          {/* Status donut chart */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Task Status Distribution</h3>
-            <div className="flex flex-col sm:flex-row items-center gap-6">
-              <div className="w-full sm:w-48 h-48 flex-shrink-0">
+            <section
+              className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+              aria-labelledby="summary-assignee-distribution-heading"
+            >
+              <h3
+                id="summary-assignee-distribution-heading"
+                className="text-sm font-semibold text-gray-700 mb-4"
+              >
+                Task Distribution By Assignee
+              </h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Share of all project tasks by current assignee (includes Unassigned when applicable).
+              </p>
+              <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius="55%"
-                      outerRadius="80%"
-                      paddingAngle={statusData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
-                      dataKey="value"
-                      strokeWidth={0}
-                    >
-                      {statusData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} />
-                      ))}
-                    </Pie>
+                  <BarChart
+                    data={assigneeDistribution.data}
+                    layout="vertical"
+                    margin={{ top: 4, right: 40, left: 8, bottom: 4 }}
+                    barCategoryGap="18%"
+                  >
+                    <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      tick={{ fontSize: 12, fill: '#9ca3af' }}
+                      axisLine={false}
+                      tickLine={false}
+                      domain={[0, assigneeDistribution.total || 1]}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fontSize: 12, fill: '#374151' }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={120}
+                    />
                     <Tooltip
-                      formatter={(value) => [
-                        `${value} (${statusTotal > 0 ? Math.round((value / statusTotal) * 100) : 0}%)`,
-                      ]}
+                      cursor={{ fill: '#f8fafc' }}
+                      formatter={(value, _name, props) => {
+                        const pct =
+                          props?.payload?.pct ??
+                          (assigneeDistribution.total > 0
+                            ? Math.round((Number(value) / assigneeDistribution.total) * 100)
+                            : 0);
+                        return [
+                          `${value} task${value !== 1 ? 's' : ''} (${pct}% of all tasks)`,
+                          props.payload.name,
+                        ];
+                      }}
                       contentStyle={{
                         borderRadius: '6px',
                         border: '1px solid #e5e7eb',
                         fontSize: '13px',
                       }}
                     />
-                  </PieChart>
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} label={<BarLabel />}>
+                      {assigneeDistribution.data.map((entry) => (
+                        <Cell key={entry.rowKey} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex-1 w-full">
-                <DonutLegend
-                  payload={statusData.map((d) => ({ value: d.name, color: d.color, payload: d }))}
-                  total={statusTotal}
-                />
-              </div>
-            </div>
+            </section>
           </div>
 
           {/* Priority bar chart */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 min-w-0">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">Task Priority Distribution</h3>
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
@@ -314,8 +397,7 @@ export default function ProjectAnalytics() {
               </ResponsiveContainer>
             </div>
 
-            {/* Priority totals legend */}
-            <div className="flex items-center justify-center gap-5 mt-3">
+            <div className="flex items-center justify-center gap-5 mt-3 flex-wrap">
               {priorityData.map((entry) => (
                 <span key={entry.name} className="flex items-center gap-1.5 text-xs text-gray-500">
                   <span
@@ -330,11 +412,6 @@ export default function ProjectAnalytics() {
           </div>
         </div>
       )}
-
-      {/* ── Kanban Metrics section ─────────────────────────────────────────── */}
-      <div className="border-t border-gray-200 pt-6">
-        <KanbanMetrics />
-      </div>
     </div>
   );
 }
