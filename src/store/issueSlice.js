@@ -1,5 +1,16 @@
 import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
-import { isToday, isThisWeek, isThisMonth, parseISO } from 'date-fns';
+import {
+  isToday,
+  isThisWeek,
+  isThisMonth,
+  parseISO,
+  isValid,
+  subDays,
+  startOfDay,
+  endOfDay,
+  eachDayOfInterval,
+  format,
+} from 'date-fns';
 import {
   INITIAL_FILTERS,
   applyFilters,
@@ -392,6 +403,115 @@ export const selectPriorityDistribution = createSelector(
   }
 );
 
+const COMPLETION_TREND_DATE_KEY_FMT = 'yyyy-MM-dd';
+const COMPLETION_TREND_LABEL_FMT = 'MMM d';
+const COMPLETION_TREND_DAYS = 14;
+
+function safeParseISODate(value) {
+  if (!value) return null;
+  try {
+    const d = parseISO(String(value));
+    return isValid(d) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSprintId(sprintId) {
+  const n = Number(sprintId);
+  return Number.isFinite(n) ? n : null;
+}
+
+function issueBelongsToSprint(issue, sprintId) {
+  const issueSprintId = normalizeSprintId(issue?.sprintId);
+  return issueSprintId != null && sprintId != null && issueSprintId === sprintId;
+}
+
+function buildIssueSummary(issues) {
+  const total = issues.length;
+  const completed = issues.filter((i) => i.status === 'DONE').length;
+  const inProgress = issues.filter((i) => i.status === 'IN_PROGRESS').length;
+  const overdue = issues.filter((i) => isIssueOverdue(i)).length;
+  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { total, completed, inProgress, overdue, completionRate };
+}
+
+function buildStatusDistribution(issues) {
+  const todo = issues.filter((i) => i.status === 'TO_DO').length;
+  const inProgress = issues.filter((i) => i.status === 'IN_PROGRESS').length;
+  const done = issues.filter((i) => i.status === 'DONE').length;
+  return [
+    { name: 'To Do', value: todo, color: '#94a3b8' },
+    { name: 'In Progress', value: inProgress, color: '#3b82f6' },
+    { name: 'Done', value: done, color: '#22c55e' },
+  ];
+}
+
+function buildPriorityDistribution(issues) {
+  const high = issues.filter((i) => i.priority === 'HIGH').length;
+  const medium = issues.filter((i) => i.priority === 'MEDIUM').length;
+  const low = issues.filter((i) => i.priority === 'LOW').length;
+  return [
+    { name: 'High', value: high, color: '#ef4444' },
+    { name: 'Medium', value: medium, color: '#f59e0b' },
+    { name: 'Low', value: low, color: '#22c55e' },
+  ];
+}
+
+function buildCompletionTrendLastNDays(issues, daysBack = COMPLETION_TREND_DAYS) {
+  const end = endOfDay(new Date());
+  const start = startOfDay(subDays(end, daysBack - 1));
+  const days = eachDayOfInterval({ start, end });
+
+  const countByDayKey = new Map();
+  for (const day of days) {
+    countByDayKey.set(format(day, COMPLETION_TREND_DATE_KEY_FMT), 0);
+  }
+
+  for (const issue of issues) {
+    if (issue?.status !== 'DONE') continue;
+    const completedAt = safeParseISODate(issue.taskCompletedAt);
+    if (!completedAt) continue;
+    if (completedAt < start || completedAt > end) continue;
+    const key = format(completedAt, COMPLETION_TREND_DATE_KEY_FMT);
+    if (!countByDayKey.has(key)) continue;
+    countByDayKey.set(key, (countByDayKey.get(key) || 0) + 1);
+  }
+
+  return days.map((day) => {
+    const dateKey = format(day, COMPLETION_TREND_DATE_KEY_FMT);
+    return {
+      dateKey,
+      label: format(day, COMPLETION_TREND_LABEL_FMT),
+      count: countByDayKey.get(dateKey) || 0,
+    };
+  });
+}
+
+/** Summary tab: tasks completed per day (last 14 days), with zero-fill for missing days. */
+export const selectCompletionTrendLast14Days = createSelector(
+  [selectAllIssues],
+  (issues) => buildCompletionTrendLastNDays(issues),
+);
+
+const makeSelectSprintScopedIssues = () =>
+  createSelector(
+    [selectAllIssues, (_state, sprintId) => normalizeSprintId(sprintId)],
+    (issues, sprintId) => issues.filter((issue) => issueBelongsToSprint(issue, sprintId)),
+  );
+
+export const makeSelectSprintIssueSummary = () =>
+  createSelector([makeSelectSprintScopedIssues()], (issues) => buildIssueSummary(issues));
+
+export const makeSelectSprintStatusDistribution = () =>
+  createSelector([makeSelectSprintScopedIssues()], (issues) => buildStatusDistribution(issues));
+
+export const makeSelectSprintPriorityDistribution = () =>
+  createSelector([makeSelectSprintScopedIssues()], (issues) => buildPriorityDistribution(issues));
+
+export const makeSelectSprintCompletionTrendLast14Days = () =>
+  createSelector([makeSelectSprintScopedIssues()], (issues) => buildCompletionTrendLastNDays(issues));
+
 const ASSIGNEE_CHART_COLORS = [
   '#3b82f6',
   '#8b5cf6',
@@ -436,99 +556,108 @@ function memberDisplayName(user) {
 }
 
 /** Horizontal bar rows: project members (non-zero), orphan assignees, Unassigned last. */
+function buildAssigneeDistribution(issues, currentProject) {
+  const total = issues.length;
+  if (total === 0) {
+    return { data: [], total: 0 };
+  }
+
+  const counts = new Map();
+  const idToLabel = new Map();
+
+  for (const issue of issues) {
+    const aid = issueAssigneeId(issue);
+    if (aid == null) {
+      counts.set(UNASSIGNED_BUCKET_KEY, (counts.get(UNASSIGNED_BUCKET_KEY) || 0) + 1);
+    } else {
+      const key = String(aid);
+      counts.set(key, (counts.get(key) || 0) + 1);
+      if (!idToLabel.has(key) && issue.assigneeName) {
+        idToLabel.set(key, String(issue.assigneeName).trim());
+      }
+    }
+  }
+
+  const memberIdsOrdered = [];
+  const memberLabelById = new Map();
+  if (currentProject) {
+    const owner = currentProject.owner;
+    const team = currentProject.team || [];
+    if (owner?.id != null) {
+      const oid = String(owner.id);
+      memberIdsOrdered.push(oid);
+      memberLabelById.set(oid, memberDisplayName(owner));
+    }
+    const seenOwner = new Set(memberIdsOrdered);
+    for (const m of team) {
+      if (m?.id == null) continue;
+      const mid = String(m.id);
+      if (seenOwner.has(mid)) continue;
+      seenOwner.add(mid);
+      memberIdsOrdered.push(mid);
+      memberLabelById.set(mid, memberDisplayName(m));
+    }
+  }
+
+  const data = [];
+  const includedAssigneeKeys = new Set();
+
+  for (const mid of memberIdsOrdered) {
+    const c = counts.get(mid) || 0;
+    if (c <= 0) continue;
+    data.push({
+      rowKey: `member-${mid}`,
+      name: memberLabelById.get(mid) || idToLabel.get(mid) || `User ${mid}`,
+      value: c,
+      color: assigneeColorForUserId(mid),
+      pct: Math.round((c / total) * 100),
+    });
+    includedAssigneeKeys.add(mid);
+  }
+
+  const orphanKeys = [...counts.keys()].filter(
+    (k) => k !== UNASSIGNED_BUCKET_KEY && !includedAssigneeKeys.has(k) && (counts.get(k) || 0) > 0,
+  );
+  orphanKeys.sort((a, b) =>
+    (idToLabel.get(a) || a).localeCompare(idToLabel.get(b) || b, undefined, { sensitivity: 'base' }),
+  );
+  for (const k of orphanKeys) {
+    const c = counts.get(k) || 0;
+    data.push({
+      rowKey: `orphan-${k}`,
+      name: idToLabel.get(k) || `User ${k}`,
+      value: c,
+      color: assigneeColorForUserId(k),
+      pct: Math.round((c / total) * 100),
+    });
+    includedAssigneeKeys.add(k);
+  }
+
+  const unassigned = counts.get(UNASSIGNED_BUCKET_KEY) || 0;
+  if (unassigned > 0) {
+    data.push({
+      rowKey: 'unassigned',
+      name: 'Unassigned',
+      value: unassigned,
+      color: '#9ca3af',
+      pct: Math.round((unassigned / total) * 100),
+    });
+  }
+
+  return { data, total };
+}
+
+/** Horizontal bar rows: project members (non-zero), orphan assignees, Unassigned last. */
 export const selectAssigneeDistribution = createSelector(
   [selectAllIssues, (state) => state.project.currentProject],
-  (issues, currentProject) => {
-    const total = issues.length;
-    if (total === 0) {
-      return { data: [], total: 0 };
-    }
-
-    const counts = new Map();
-    const idToLabel = new Map();
-
-    for (const issue of issues) {
-      const aid = issueAssigneeId(issue);
-      if (aid == null) {
-        counts.set(UNASSIGNED_BUCKET_KEY, (counts.get(UNASSIGNED_BUCKET_KEY) || 0) + 1);
-      } else {
-        const key = String(aid);
-        counts.set(key, (counts.get(key) || 0) + 1);
-        if (!idToLabel.has(key) && issue.assigneeName) {
-          idToLabel.set(key, String(issue.assigneeName).trim());
-        }
-      }
-    }
-
-    const memberIdsOrdered = [];
-    const memberLabelById = new Map();
-    if (currentProject) {
-      const owner = currentProject.owner;
-      const team = currentProject.team || [];
-      if (owner?.id != null) {
-        const oid = String(owner.id);
-        memberIdsOrdered.push(oid);
-        memberLabelById.set(oid, memberDisplayName(owner));
-      }
-      const seenOwner = new Set(memberIdsOrdered);
-      for (const m of team) {
-        if (m?.id == null) continue;
-        const mid = String(m.id);
-        if (seenOwner.has(mid)) continue;
-        seenOwner.add(mid);
-        memberIdsOrdered.push(mid);
-        memberLabelById.set(mid, memberDisplayName(m));
-      }
-    }
-
-    const data = [];
-    const includedAssigneeKeys = new Set();
-
-    for (const mid of memberIdsOrdered) {
-      const c = counts.get(mid) || 0;
-      if (c <= 0) continue;
-      data.push({
-        rowKey: `member-${mid}`,
-        name: memberLabelById.get(mid) || idToLabel.get(mid) || `User ${mid}`,
-        value: c,
-        color: assigneeColorForUserId(mid),
-        pct: Math.round((c / total) * 100),
-      });
-      includedAssigneeKeys.add(mid);
-    }
-
-    const orphanKeys = [...counts.keys()].filter(
-      (k) => k !== UNASSIGNED_BUCKET_KEY && !includedAssigneeKeys.has(k) && (counts.get(k) || 0) > 0,
-    );
-    orphanKeys.sort((a, b) =>
-      (idToLabel.get(a) || a).localeCompare(idToLabel.get(b) || b, undefined, { sensitivity: 'base' }),
-    );
-    for (const k of orphanKeys) {
-      const c = counts.get(k) || 0;
-      data.push({
-        rowKey: `orphan-${k}`,
-        name: idToLabel.get(k) || `User ${k}`,
-        value: c,
-        color: assigneeColorForUserId(k),
-        pct: Math.round((c / total) * 100),
-      });
-      includedAssigneeKeys.add(k);
-    }
-
-    const unassigned = counts.get(UNASSIGNED_BUCKET_KEY) || 0;
-    if (unassigned > 0) {
-      data.push({
-        rowKey: 'unassigned',
-        name: 'Unassigned',
-        value: unassigned,
-        color: '#9ca3af',
-        pct: Math.round((unassigned / total) * 100),
-      });
-    }
-
-    return { data, total };
-  },
+  (issues, currentProject) => buildAssigneeDistribution(issues, currentProject),
 );
+
+export const makeSelectSprintAssigneeDistribution = () =>
+  createSelector(
+    [makeSelectSprintScopedIssues(), (state) => state.project.currentProject],
+    (issues, currentProject) => buildAssigneeDistribution(issues, currentProject),
+  );
 
 // Counts for the optional due-date cards (excludes completed tasks).
 export const selectDueDateSummary = createSelector(
@@ -543,3 +672,14 @@ export const selectDueDateSummary = createSelector(
     };
   }
 );
+
+export const makeSelectSprintDueDateSummary = () =>
+  createSelector([makeSelectSprintScopedIssues()], (issues) => {
+    const open = issues.filter((i) => i.status !== 'DONE' && i.dueDate);
+    const parse = (d) => parseISO(String(d));
+    return {
+      dueToday: open.filter((i) => isToday(parse(i.dueDate))).length,
+      dueThisWeek: open.filter((i) => isThisWeek(parse(i.dueDate), { weekStartsOn: 1 })).length,
+      dueThisMonth: open.filter((i) => isThisMonth(parse(i.dueDate))).length,
+    };
+  });

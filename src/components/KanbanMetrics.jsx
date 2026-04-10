@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
+  ResponsiveContainer,
 } from 'recharts';
 import {
   parseISO,
@@ -45,6 +45,13 @@ function minutesToDays(mins) {
 
 const DATE_FMT = 'MMM d';
 
+/** Single source for KPI cards, line series, bars, and legends */
+const METRIC_COLORS = {
+  cycle: '#dc2626',
+  lead: '#ca8a04',
+  throughput: '#10b981',
+};
+
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
 const TOOLTIP_STYLE = {
@@ -73,7 +80,9 @@ function ThroughputTooltip({ active, payload, label }) {
   return (
     <div style={TOOLTIP_STYLE} className="bg-white p-2.5 shadow-sm">
       <p className="text-xs font-medium text-gray-600 mb-1">{label}</p>
-      <p className="text-xs text-blue-600">{v} task{v !== 1 ? 's' : ''} completed</p>
+      <p className="text-xs font-medium" style={{ color: METRIC_COLORS.throughput }}>
+        {v} task{v !== 1 ? 's' : ''} completed
+      </p>
     </div>
   );
 }
@@ -88,15 +97,16 @@ function ChartEmpty({ message }) {
   );
 }
 
-// ── Metric label ─────────────────────────────────────────────────────────────
-
-function MetricLabel({ label, value, unit, color }) {
+function KpiMetricsCard({ title, primary, accentColor, valueColor, className = '' }) {
   return (
-    <div className="flex flex-col">
-      <span className="text-xs text-gray-500">{label}</span>
-      <span className={`text-lg font-semibold ${color}`}>
-        {value != null ? `${value} ${unit}` : '—'}
-      </span>
+    <div
+      className={`bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 p-4 min-w-0 ${className}`}
+      style={{ borderLeftColor: accentColor }}
+    >
+      <p className="text-sm text-gray-500 mb-1">{title}</p>
+      <p className="text-2xl font-semibold tabular-nums" style={{ color: valueColor }}>
+        {primary}
+      </p>
     </div>
   );
 }
@@ -235,32 +245,70 @@ export default function KanbanMetrics() {
         </div>
       </div>
 
-      {/* ── Section 1: WIP card ──────────────────────────────────────────────── */}
-      <div>
-        <div className="inline-block bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-indigo-500 p-4 min-w-40">
-          <p className="text-sm text-gray-500 mb-1">Work In Progress</p>
-          <p className="text-2xl font-semibold text-indigo-600">{summary.inProgress}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Current snapshot</p>
+      {/* ── WIP + KPI cards: one row when space allows, wrap on narrow viewports ─ */}
+      <div className="flex flex-wrap gap-4 items-stretch">
+        <div className="min-w-[11rem] flex-1 basis-[12rem]">
+          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-indigo-500 p-4">
+            <p className="text-sm text-gray-500 mb-1">Work In Progress</p>
+            <p className="text-2xl font-semibold text-indigo-600">{summary.inProgress}</p>
+          </div>
+        </div>
+        <div className="min-w-[11rem] flex-1 basis-[12rem]">
+          <KpiMetricsCard
+            className="h-full"
+            title="Avg Cycle Time"
+            primary={avgCycleTime != null ? `${avgCycleTime} days` : '—'}
+            accentColor={METRIC_COLORS.cycle}
+            valueColor={METRIC_COLORS.cycle}
+          />
+        </div>
+        <div className="min-w-[11rem] flex-1 basis-[12rem]">
+          <KpiMetricsCard
+            className="h-full"
+            title="Avg Lead Time"
+            primary={avgLeadTime != null ? `${avgLeadTime} days` : '—'}
+            accentColor={METRIC_COLORS.lead}
+            valueColor={METRIC_COLORS.lead}
+          />
+        </div>
+        <div className="min-w-[11rem] flex-1 basis-[12rem]">
+          <KpiMetricsCard
+            className="h-full"
+            title="Throughput"
+            primary={`${throughput}`}
+            accentColor={METRIC_COLORS.throughput}
+            valueColor={METRIC_COLORS.throughput}
+          />
         </div>
       </div>
 
       {/* ── Section 2: Cycle Time + Lead Time ───────────────────────────────── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between flex-wrap gap-4 mb-5">
-          <h3 className="text-sm font-semibold text-gray-700">Cycle Time &amp; Lead Time Trend</h3>
-          <div className="flex items-center gap-6">
-            <MetricLabel
-              label="Avg Cycle Time"
-              value={avgCycleTime}
-              unit="days"
-              color="text-violet-600"
-            />
-            <MetricLabel
-              label="Avg Lead Time"
-              value={avgLeadTime}
-              unit="days"
-              color="text-blue-600"
-            />
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-sm font-semibold text-gray-700 shrink-0">
+            Cycle Time &amp; Lead Time Trend
+          </h3>
+          <div
+            className="flex flex-wrap items-center gap-x-6 gap-y-2 shrink-0 sm:justify-end"
+            role="list"
+            aria-label="Line series"
+          >
+            <div className="flex items-center gap-2" role="listitem">
+              <span
+                className="inline-block h-0.5 w-7 shrink-0 rounded-full"
+                style={{ backgroundColor: METRIC_COLORS.cycle }}
+                aria-hidden
+              />
+              <span className="text-xs text-gray-600">Avg Cycle Time</span>
+            </div>
+            <div className="flex items-center gap-2" role="listitem">
+              <span
+                className="inline-block h-0.5 w-7 shrink-0 rounded-full"
+                style={{ backgroundColor: METRIC_COLORS.lead }}
+                aria-hidden
+              />
+              <span className="text-xs text-gray-600">Avg Lead Time</span>
+            </div>
           </div>
         </div>
 
@@ -286,19 +334,14 @@ export default function KanbanMetrics() {
                   width={32}
                 />
                 <Tooltip content={<CycleLeadTooltip />} />
-                <Legend
-                  iconType="circle"
-                  iconSize={8}
-                  formatter={(value) => <span className="text-xs text-gray-600">{value}</span>}
-                />
                 {/* connectNulls={false} is the default — gaps render for null values */}
                 <Line
                   type="monotone"
                   dataKey="cycleTime"
                   name="Cycle Time"
-                  stroke="#7c3aed"
+                  stroke={METRIC_COLORS.cycle}
                   strokeWidth={2}
-                  dot={{ r: 3, fill: '#7c3aed' }}
+                  dot={{ r: 3, fill: METRIC_COLORS.cycle }}
                   activeDot={{ r: 5 }}
                   connectNulls={false}
                 />
@@ -306,9 +349,9 @@ export default function KanbanMetrics() {
                   type="monotone"
                   dataKey="leadTime"
                   name="Lead Time"
-                  stroke="#3b82f6"
+                  stroke={METRIC_COLORS.lead}
                   strokeWidth={2}
-                  dot={{ r: 3, fill: '#3b82f6' }}
+                  dot={{ r: 3, fill: METRIC_COLORS.lead }}
                   activeDot={{ r: 5 }}
                   connectNulls={false}
                 />
@@ -320,14 +363,16 @@ export default function KanbanMetrics() {
 
       {/* ── Section 3: Throughput ────────────────────────────────────────────── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between flex-wrap gap-4 mb-5">
-          <h3 className="text-sm font-semibold text-gray-700">Throughput Trend</h3>
-          <MetricLabel
-            label="Throughput"
-            value={throughput > 0 ? throughput : null}
-            unit={`task${throughput !== 1 ? 's' : ''} completed`}
-            color="text-emerald-600"
-          />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
+          <h3 className="text-sm font-semibold text-gray-700 shrink-0">Throughput Trend</h3>
+          <div className="flex items-center gap-2 shrink-0 sm:justify-end">
+            <span
+              className="inline-block w-3.5 h-3.5 shrink-0 rounded-none"
+              style={{ backgroundColor: METRIC_COLORS.throughput }}
+              aria-hidden
+            />
+            <span className="text-xs text-gray-600">Throughput</span>
+          </div>
         </div>
 
         <div className="h-52">
@@ -349,7 +394,12 @@ export default function KanbanMetrics() {
                 width={24}
               />
               <Tooltip content={<ThroughputTooltip />} cursor={{ fill: '#f8fafc' }} />
-              <Bar dataKey="count" name="Completed" fill="#10b981" radius={[3, 3, 0, 0]} />
+              <Bar
+                dataKey="count"
+                name="Completed"
+                fill={METRIC_COLORS.throughput}
+                radius={[3, 3, 0, 0]}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>

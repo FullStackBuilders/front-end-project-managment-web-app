@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  LineChart, Line,
 } from 'recharts';
 import {
   selectIssueSummary,
@@ -10,6 +11,7 @@ import {
   selectPriorityDistribution,
   selectDueDateSummary,
   selectAssigneeDistribution,
+  selectCompletionTrendLast14Days,
 } from '../store/issueSlice';
 import { BarChart2, SlidersHorizontal } from 'lucide-react';
 
@@ -102,6 +104,12 @@ function BarLabel({ x, y, width, value }) {
   );
 }
 
+function completionTrendTickFormatter(value, index) {
+  // 14 points can crowd; show every other tick for readability.
+  if (index % 2 !== 0) return '';
+  return value;
+}
+
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -122,6 +130,7 @@ export default function ProjectSummary() {
   const priorityData = useSelector(selectPriorityDistribution);
   const dueDates     = useSelector(selectDueDateSummary);
   const assigneeDistribution = useSelector(selectAssigneeDistribution);
+  const completionTrend = useSelector(selectCompletionTrendLast14Days);
 
   const statusTotal   = statusData.reduce((sum, d) => sum + d.value, 0);
   const priorityTotal = priorityData.reduce((sum, d) => sum + d.value, 0);
@@ -235,123 +244,54 @@ export default function ProjectSummary() {
           <EmptyState />
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left column: Status, then assignee distribution */}
-          <div className="space-y-6 min-w-0">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Task Status Distribution</h3>
-              <div className="flex flex-col sm:flex-row items-center gap-6">
-                <div className="w-full sm:w-48 h-48 flex-shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={statusData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius="55%"
-                        outerRadius="80%"
-                        paddingAngle={statusData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
-                        dataKey="value"
-                        strokeWidth={0}
-                      >
-                        {statusData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value) => [
-                          `${value} (${statusTotal > 0 ? Math.round((value / statusTotal) * 100) : 0}%)`,
-                        ]}
-                        contentStyle={{
-                          borderRadius: '6px',
-                          border: '1px solid #e5e7eb',
-                          fontSize: '13px',
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex-1 w-full">
-                  <DonutLegend
-                    payload={statusData.map((d) => ({ value: d.name, color: d.color, payload: d }))}
-                    total={statusTotal}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <section
-              className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
-              aria-labelledby="summary-assignee-distribution-heading"
-            >
-              <h3
-                id="summary-assignee-distribution-heading"
-                className="text-sm font-semibold text-gray-700 mb-4"
-              >
-                Task Distribution By Assignee
-              </h3>
-              <p className="text-xs text-gray-500 mb-3">
-                Share of all project tasks by current assignee (includes Unassigned when applicable).
-              </p>
-              <div className="h-48">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* 1) Status donut */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 min-w-0 h-[306px] flex flex-col">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Task Status Distribution</h3>
+            <div className="flex flex-col sm:flex-row items-center gap-6 flex-1 min-h-0">
+              <div className="w-full sm:w-48 h-48 flex-shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={assigneeDistribution.data}
-                    layout="vertical"
-                    margin={{ top: 4, right: 40, left: 8, bottom: 4 }}
-                    barCategoryGap="18%"
-                  >
-                    <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis
-                      type="number"
-                      allowDecimals={false}
-                      tick={{ fontSize: 12, fill: '#9ca3af' }}
-                      axisLine={false}
-                      tickLine={false}
-                      domain={[0, assigneeDistribution.total || 1]}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fontSize: 12, fill: '#374151' }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={120}
-                    />
+                  <PieChart>
+                    <Pie
+                      data={statusData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius="55%"
+                      outerRadius="80%"
+                      paddingAngle={statusData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
+                      dataKey="value"
+                      strokeWidth={0}
+                    >
+                      {statusData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
                     <Tooltip
-                      cursor={{ fill: '#f8fafc' }}
-                      formatter={(value, _name, props) => {
-                        const pct =
-                          props?.payload?.pct ??
-                          (assigneeDistribution.total > 0
-                            ? Math.round((Number(value) / assigneeDistribution.total) * 100)
-                            : 0);
-                        return [
-                          `${value} task${value !== 1 ? 's' : ''} (${pct}% of all tasks)`,
-                          props.payload.name,
-                        ];
-                      }}
+                      formatter={(value) => [
+                        `${value} (${statusTotal > 0 ? Math.round((value / statusTotal) * 100) : 0}%)`,
+                      ]}
                       contentStyle={{
                         borderRadius: '6px',
                         border: '1px solid #e5e7eb',
                         fontSize: '13px',
                       }}
                     />
-                    <Bar dataKey="value" radius={[0, 4, 4, 0]} label={<BarLabel />}>
-                      {assigneeDistribution.data.map((entry) => (
-                        <Cell key={entry.rowKey} fill={entry.color} />
-                      ))}
-                    </Bar>
-                  </BarChart>
+                  </PieChart>
                 </ResponsiveContainer>
               </div>
-            </section>
+              <div className="flex-1 w-full overflow-auto min-h-0">
+                <DonutLegend
+                  payload={statusData.map((d) => ({ value: d.name, color: d.color, payload: d }))}
+                  total={statusTotal}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Priority bar chart */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 min-w-0">
+          {/* 2) Priority distribution */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 min-w-0 h-[306px] flex flex-col">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">Task Priority Distribution</h3>
-            <div className="h-48">
+            <div className="h-48 flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={priorityData}
@@ -397,7 +337,7 @@ export default function ProjectSummary() {
               </ResponsiveContainer>
             </div>
 
-            <div className="flex items-center justify-center gap-5 mt-3 flex-wrap">
+            <div className="flex items-center justify-center gap-5 mt-3 flex-wrap shrink-0">
               {priorityData.map((entry) => (
                 <span key={entry.name} className="flex items-center gap-1.5 text-xs text-gray-500">
                   <span
@@ -408,6 +348,119 @@ export default function ProjectSummary() {
                   <span className="font-medium text-gray-700">{entry.value}</span>
                 </span>
               ))}
+            </div>
+          </div>
+
+          {/* 3) Assignee distribution */}
+          <section
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 min-w-0 h-[306px] flex flex-col"
+            aria-labelledby="summary-assignee-distribution-heading"
+          >
+            <h3
+              id="summary-assignee-distribution-heading"
+              className="text-sm font-semibold text-gray-700 mb-4 shrink-0"
+            >
+              Tasks by Assignee
+            </h3>
+            <p className="text-xs text-gray-500 mb-3">
+              Share of all project tasks by current assignee (includes Unassigned when applicable).
+            </p>
+            <div className="h-48 flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={assigneeDistribution.data}
+                  layout="vertical"
+                  margin={{ top: 4, right: 40, left: 8, bottom: 4 }}
+                  barCategoryGap="18%"
+                >
+                  <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    tick={{ fontSize: 12, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={[0, assigneeDistribution.total || 1]}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fontSize: 12, fill: '#374151' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={120}
+                  />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    formatter={(value, _name, props) => {
+                      const pct =
+                        props?.payload?.pct ??
+                        (assigneeDistribution.total > 0
+                          ? Math.round((Number(value) / assigneeDistribution.total) * 100)
+                          : 0);
+                      return [
+                        `${value} task${value !== 1 ? 's' : ''} (${pct}% of all tasks)`,
+                        props.payload.name,
+                      ];
+                    }}
+                    contentStyle={{
+                      borderRadius: '6px',
+                      border: '1px solid #e5e7eb',
+                      fontSize: '13px',
+                    }}
+                  />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]} label={<BarLabel />}>
+                    {assigneeDistribution.data.map((entry) => (
+                      <Cell key={entry.rowKey} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+
+          {/* 4) Completion trend */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 min-w-0 h-[306px] flex flex-col">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Task Completion Trend</h3>
+            <div className="h-48 flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={completionTrend} margin={{ top: 6, right: 16, left: 0, bottom: 6 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 11, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={completionTrendTickFormatter}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={28}
+                  />
+                  <Tooltip
+                    cursor={{ stroke: '#e5e7eb' }}
+                    formatter={(value) => [
+                      `${value} task${Number(value) !== 1 ? 's' : ''} completed`,
+                    ]}
+                    contentStyle={{
+                      borderRadius: '6px',
+                      border: '1px solid #e5e7eb',
+                      fontSize: '13px',
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="count"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    dot={{ r: 2, fill: '#10b981' }}
+                    activeDot={{ r: 4 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </div>

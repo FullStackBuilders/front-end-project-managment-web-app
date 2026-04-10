@@ -3,12 +3,14 @@ import ScrumBacklogView from "./ScrumBacklogView";
 import ScrumBoardView from "./ScrumBoardView";
 import ScrumListView from "./ScrumListView";
 import ScrumCalendarView from "./ScrumCalendarView";
+import ScrumSummaryView from "./ScrumSummaryView";
 
 const TABS = [
   { id: "backlog", label: "Backlog" },
   { id: "board", label: "Board" },
   { id: "list", label: "List" },
   { id: "calendar", label: "Calendar" },
+  { id: "summary", label: "Summary" },
 ];
 
 /**
@@ -70,6 +72,12 @@ export default function ScrumProjectWorkspace({ projectId }) {
       {activeTab === "calendar" && (
         <div role="tabpanel" aria-labelledby="scrum-tab-calendar">
           <ScrumCalendarView projectId={projectId} />
+        </div>
+      )}
+
+      {activeTab === "summary" && (
+        <div role="tabpanel" aria-labelledby="scrum-tab-summary">
+          <ScrumSummaryView projectId={projectId} />
         </div>
       )}
     </div>
