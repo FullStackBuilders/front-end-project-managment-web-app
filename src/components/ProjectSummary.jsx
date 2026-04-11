@@ -14,6 +14,7 @@ import {
   selectCompletionTrendLast14Days,
 } from '../store/issueSlice';
 import { BarChart2, SlidersHorizontal } from 'lucide-react';
+import { SummaryBarTooltip } from './summaryChartTooltips';
 
 // ── Core card configuration (always visible) ─────────────────────────────────
 
@@ -318,15 +319,7 @@ export default function ProjectSummary() {
                   />
                   <Tooltip
                     cursor={{ fill: '#f8fafc' }}
-                    formatter={(value, _name, props) => [
-                      `${value} task${value !== 1 ? 's' : ''} (${priorityTotal > 0 ? Math.round((value / priorityTotal) * 100) : 0}%)`,
-                      props.payload.name,
-                    ]}
-                    contentStyle={{
-                      borderRadius: '6px',
-                      border: '1px solid #e5e7eb',
-                      fontSize: '13px',
-                    }}
+                    content={(props) => <SummaryBarTooltip {...props} total={priorityTotal} />}
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]} label={<BarLabel />}>
                     {priorityData.map((entry) => (
@@ -392,22 +385,9 @@ export default function ProjectSummary() {
                   />
                   <Tooltip
                     cursor={{ fill: '#f8fafc' }}
-                    formatter={(value, _name, props) => {
-                      const pct =
-                        props?.payload?.pct ??
-                        (assigneeDistribution.total > 0
-                          ? Math.round((Number(value) / assigneeDistribution.total) * 100)
-                          : 0);
-                      return [
-                        `${value} task${value !== 1 ? 's' : ''} (${pct}% of all tasks)`,
-                        props.payload.name,
-                      ];
-                    }}
-                    contentStyle={{
-                      borderRadius: '6px',
-                      border: '1px solid #e5e7eb',
-                      fontSize: '13px',
-                    }}
+                    content={(props) => (
+                      <SummaryBarTooltip {...props} total={assigneeDistribution.total} />
+                    )}
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]} label={<BarLabel />}>
                     {assigneeDistribution.data.map((entry) => (

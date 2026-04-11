@@ -12,7 +12,6 @@ import {
   subDays, eachDayOfInterval, format, isWithinInterval,
 } from 'date-fns';
 import { selectAllIssuesRaw, selectIssueSummary } from '../store/issueSlice';
-import { Activity } from 'lucide-react';
 
 // ── Time range constants ─────────────────────────────────────────────────────
 
@@ -221,14 +220,8 @@ export default function KanbanMetrics() {
   return (
     <div className="space-y-6">
 
-      {/* ── Section header with time range selector ───────────────────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-gray-500" />
-          <h2 className="text-base font-semibold text-gray-800">Kanban Metrics</h2>
-        </div>
-
-        {/* Time range selector */}
+      {/* ── Time range selector ───────────────────────── */}
+      <div className="flex items-center justify-end flex-wrap gap-3">
         <div className="flex items-center rounded-md border border-gray-200 overflow-hidden bg-white">
           {TIME_RANGES.map((range) => (
             <button
@@ -338,7 +331,7 @@ export default function KanbanMetrics() {
                 <Line
                   type="monotone"
                   dataKey="cycleTime"
-                  name="Cycle Time"
+                  name="Avg Cycle Time"
                   stroke={METRIC_COLORS.cycle}
                   strokeWidth={2}
                   dot={{ r: 3, fill: METRIC_COLORS.cycle }}
@@ -348,7 +341,7 @@ export default function KanbanMetrics() {
                 <Line
                   type="monotone"
                   dataKey="leadTime"
-                  name="Lead Time"
+                  name="Avg Lead Time"
                   stroke={METRIC_COLORS.lead}
                   strokeWidth={2}
                   dot={{ r: 3, fill: METRIC_COLORS.lead }}

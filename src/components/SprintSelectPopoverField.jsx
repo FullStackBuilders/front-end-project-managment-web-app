@@ -111,8 +111,11 @@ export default function SprintSelectPopoverField({
       : null;
 
   const triggerContent = selected ? (
-    <span className="text-sm text-gray-900 truncate block w-full text-left">
-      {selected.name}
+    <span className="text-sm text-gray-900 flex items-center gap-2 min-w-0 w-full text-left">
+      <span className="truncate">{selected.name}</span>
+      {(selected.status === 'ACTIVE' || selected.status === 'COMPLETED') && (
+        <SprintLifecycleBadge sprintStatus={selected.status} />
+      )}
     </span>
   ) : (
     <span className="text-sm text-gray-500">{placeholder}</span>
@@ -133,13 +136,16 @@ export default function SprintSelectPopoverField({
           <button
             type="button"
             role="option"
-            className="w-full px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+            className="w-full px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 flex-wrap"
             onClick={() => {
               onChange(s.id);
               setOpen(false);
             }}
           >
-            {s.name}
+            <span className="truncate min-w-0">{s.name}</span>
+            {(s.status === 'ACTIVE' || s.status === 'COMPLETED') && (
+              <SprintLifecycleBadge sprintStatus={s.status} />
+            )}
           </button>
         </li>
       ))}

@@ -7,7 +7,8 @@ import {
 } from 'recharts';
 import { BarChart2, SlidersHorizontal } from 'lucide-react';
 import SprintSelectPopoverField from '@/components/SprintSelectPopoverField';
-import { sprintApi } from '../../services/sprintApi';
+import { useActiveSprintSelection } from '@/hooks/useActiveSprintSelection';
+import { SummaryBarTooltip } from '@/components/summaryChartTooltips';
 import {
   makeSelectSprintIssueSummary,
   makeSelectSprintStatusDistribution,
@@ -40,23 +41,6 @@ function readStoredVisibility() {
   } catch {
     return DEFAULT_VISIBILITY;
   }
-}
-
-function compareNullableDesc(left, right) {
-  if (left == null && right == null) return 0;
-  if (left == null) return 1;
-  if (right == null) return -1;
-  if (left > right) return -1;
-  if (left < right) return 1;
-  return 0;
-}
-
-function compareActiveSprintPreference(a, b) {
-  const byStart = compareNullableDesc(a?.startDate, b?.startDate);
-  if (byStart !== 0) return byStart;
-  const byCreatedAt = compareNullableDesc(a?.createdAt, b?.createdAt);
-  if (byCreatedAt !== 0) return byCreatedAt;
-  return compareNullableDesc(Number(a?.id) || 0, Number(b?.id) || 0);
 }
 
 function completionTrendTickFormatter(value, index) {
@@ -118,9 +102,14 @@ export default function ScrumSummaryView({ projectId }) {
   const selectAssigneeDistribution = useMemo(makeSelectSprintAssigneeDistribution, []);
   const selectCompletionTrend = useMemo(makeSelectSprintCompletionTrendLast14Days, []);
 
-  const [activeSprints, setActiveSprints] = useState([]);
-  const [selectedSprintId, setSelectedSprintId] = useState(null);
-  const [loadingSprints, setLoadingSprints] = useState(true);
+  const {
+    reportSprints,
+    selectedSprintId,
+    setSelectedSprintId,
+    loadingSprints,
+    selectedSprint,
+    sprintOptions,
+  } = useActiveSprintSelection(projectId);
 
   const [configOpen, setConfigOpen] = useState(false);
   const [visibleOptionals, setVisibleOptionals] = useState(readStoredVisibility);
@@ -137,30 +126,6 @@ export default function ScrumSummaryView({ projectId }) {
   const priorityTotal = priorityData.reduce((sum, d) => sum + d.value, 0);
   const visibleOptionalCards = OPTIONAL_CARDS.filter((c) => visibleOptionals[c.id]);
 
-  const selectedSprint = useMemo(
-    () => activeSprints.find((s) => String(s.id) === String(selectedSprintId)) ?? null,
-    [activeSprints, selectedSprintId],
-  );
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      setLoadingSprints(true);
-      try {
-        const list = await sprintApi.listByProject(projectId);
-        if (!mounted) return;
-        const active = (Array.isArray(list) ? list : []).filter((s) => s.status === 'ACTIVE');
-        setActiveSprints(active);
-      } finally {
-        if (mounted) setLoadingSprints(false);
-      }
-    };
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [projectId]);
-
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(visibleOptionals));
@@ -168,17 +133,6 @@ export default function ScrumSummaryView({ projectId }) {
       // no-op
     }
   }, [visibleOptionals]);
-
-  useEffect(() => {
-    const activeIds = new Set(activeSprints.map((s) => String(s.id)));
-    if (selectedSprintId != null && activeIds.has(String(selectedSprintId))) return;
-    if (!activeSprints.length) {
-      setSelectedSprintId(null);
-      return;
-    }
-    const fallbackDefault = [...activeSprints].sort(compareActiveSprintPreference)[0];
-    setSelectedSprintId(fallbackDefault?.id ?? null);
-  }, [activeSprints, selectedSprintId]);
 
   const handleOutsideClick = useCallback((e) => {
     if (configRef.current && !configRef.current.contains(e.target)) setConfigOpen(false);
@@ -195,11 +149,9 @@ export default function ScrumSummaryView({ projectId }) {
     };
   }, [configOpen, handleOutsideClick]);
 
-  if (!loadingSprints && activeSprints.length === 0) {
-    return <EmptySummaryState message="No active sprints available. Start a sprint to view summary." />;
+  if (!loadingSprints && reportSprints.length === 0) {
+    return <EmptySummaryState message="No sprints available for summary. Start a sprint to view summary." />;
   }
-
-  const sprintOptions = activeSprints.map((s) => ({ id: s.id, name: s.name, status: s.status }));
 
   return (
     <div className="space-y-6 pb-8">
@@ -239,8 +191,8 @@ export default function ScrumSummaryView({ projectId }) {
             options={sprintOptions}
             value={selectedSprintId}
             onChange={setSelectedSprintId}
-            disabled={loadingSprints || !activeSprints.length}
-            placeholder="Select active sprint"
+            disabled={loadingSprints || !reportSprints.length}
+            placeholder="Select sprint"
             triggerId="scrum-summary-sprint-trigger"
             rootClassName="min-w-[220px]"
           />
@@ -253,10 +205,6 @@ export default function ScrumSummaryView({ projectId }) {
         )}
       </div>
 
-      <p className="text-xs text-gray-500">
-        {selectedSprint ? `Sprint: ${selectedSprint.name}` : 'Sprint: —'}
-      </p>
-
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {CORE_CARDS.map(({ key, label, border, text }) => (
           <StatCard key={key} label={label} value={summary[key]} border={border} text={text} />
@@ -267,7 +215,7 @@ export default function ScrumSummaryView({ projectId }) {
       </div>
 
       {summary.total === 0 ? (
-        <EmptySummaryState message="No tasks found in the selected active sprint." />
+        <EmptySummaryState message="No tasks found in the selected sprint." />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 min-w-0 h-[306px] flex flex-col">
@@ -296,7 +244,10 @@ export default function ScrumSummaryView({ projectId }) {
                   <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} domain={[0, priorityTotal || 1]} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 13, fill: '#374151' }} axisLine={false} tickLine={false} width={52} />
-                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    content={(props) => <SummaryBarTooltip {...props} total={priorityTotal} />}
+                  />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]} label={<BarLabel />}>
                     {priorityData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
                   </Bar>
@@ -313,7 +264,12 @@ export default function ScrumSummaryView({ projectId }) {
                   <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} domain={[0, assigneeDistribution.total || 1]} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: '#374151' }} axisLine={false} tickLine={false} width={120} />
-                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    content={(props) => (
+                      <SummaryBarTooltip {...props} total={assigneeDistribution.total} />
+                    )}
+                  />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]} label={<BarLabel />}>
                     {assigneeDistribution.data.map((entry) => <Cell key={entry.rowKey} fill={entry.color} />)}
                   </Bar>
