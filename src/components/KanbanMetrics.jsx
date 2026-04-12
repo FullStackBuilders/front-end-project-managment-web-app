@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
+import { Sparkles } from 'lucide-react';
+import PlutoMetricsInsightDrawer from './PlutoMetricsInsightDrawer';
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -112,11 +114,23 @@ function KpiMetricsCard({ title, primary, accentColor, valueColor, className = '
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function KanbanMetrics() {
+export default function KanbanMetrics({
+  projectId,
+  projectName,
+  metricsTimeRange,
+  onMetricsTimeRangeChange,
+  insightOpen,
+  onInsightOpenChange,
+  insightSections,
+  insightLoading,
+  insightError,
+  onRequestInsights,
+  onToolbarAiInsights,
+}) {
   const issues  = useSelector(selectAllIssuesRaw);
   const summary = useSelector(selectIssueSummary);
 
-  const [timeRange, setTimeRange] = useState('LAST_7_DAYS');
+  const timeRange = metricsTimeRange;
 
   // ── Issues completed within selected time range ───────────────────────────
 
@@ -222,11 +236,22 @@ export default function KanbanMetrics() {
 
       {/* ── Time range selector ───────────────────────── */}
       <div className="flex items-center justify-end flex-wrap gap-3">
+        {projectId && (
+          <button
+            type="button"
+            onClick={onToolbarAiInsights}
+            className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-50 hover:border-indigo-300"
+          >
+            <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            AI Insights
+          </button>
+        )}
         <div className="flex items-center rounded-md border border-gray-200 overflow-hidden bg-white">
           {TIME_RANGES.map((range) => (
             <button
               key={range.id}
-              onClick={() => setTimeRange(range.id)}
+              type="button"
+              onClick={() => onMetricsTimeRangeChange(range.id)}
               className={`px-3 py-1.5 text-xs font-medium transition-colors border-r border-gray-200 last:border-r-0
                 ${timeRange === range.id
                   ? 'bg-primary text-white'
@@ -237,6 +262,19 @@ export default function KanbanMetrics() {
           ))}
         </div>
       </div>
+
+      {projectId && (
+        <PlutoMetricsInsightDrawer
+          open={insightOpen}
+          onOpenChange={onInsightOpenChange}
+          projectId={projectId}
+          projectName={projectName}
+          sections={insightSections}
+          loading={insightLoading}
+          error={insightError}
+          onRetry={onRequestInsights}
+        />
+      )}
 
       {/* ── WIP + KPI cards: one row when space allows, wrap on narrow viewports ─ */}
       <div className="flex flex-wrap gap-4 items-stretch">

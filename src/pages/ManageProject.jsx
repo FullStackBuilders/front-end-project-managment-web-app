@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import Header from '../components/Header';
@@ -11,8 +11,11 @@ import ProjectSummary from '../components/ProjectSummary';
 import KanbanMetrics from '../components/KanbanMetrics';
 import ScrumProjectWorkspace from '../components/scrum/ScrumProjectWorkspace';
 import { fetchProjectById } from '../store/projectSlice';
-import { fetchIssuesByProject, clearIssues } from '../store/issueSlice';
+import { fetchIssuesByProject, clearIssues, selectAllIssuesRaw } from '../store/issueSlice';
 import { fetchChatMessages } from '../store/chatSlice';
+import ApiService from '../services/ApiService';
+import CustomApiError from '../services/CustomApiError';
+import { buildKanbanInsightsStaleKey } from '../utils/kanbanInsightsStaleKey';
 
 const KANBAN_WORKSPACE_TABS = [
   { id: 'board', label: 'Board' },
@@ -29,6 +32,88 @@ export default function ManageProject() {
   const { currentProject, loading: projectLoading, error: projectError } = useSelector(state => state.project);
   const { loading: issuesLoading, error: issuesError, currentProjectId } = useSelector(state => state.issues);
   const { loading: chatLoading } = useSelector(state => state.chat);
+  const issues = useSelector(selectAllIssuesRaw);
+
+  const [kanbanMetricsTimeRange, setKanbanMetricsTimeRange] = useState('LAST_7_DAYS');
+  const [insightOpen, setInsightOpen] = useState(false);
+  const [insightSections, setInsightSections] = useState(null);
+  const [insightError, setInsightError] = useState(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+
+  const insightsStaleKey = useMemo(
+    () =>
+      buildKanbanInsightsStaleKey({
+        projectId,
+        timeRange: kanbanMetricsTimeRange,
+        issues,
+      }),
+    [projectId, kanbanMetricsTimeRange, issues]
+  );
+
+  const staleKeyRef = useRef(insightsStaleKey);
+  const insightInFlight = useRef(false);
+  const prevProjectIdRef = useRef(projectId);
+
+  useEffect(() => {
+    staleKeyRef.current = insightsStaleKey;
+  }, [insightsStaleKey]);
+
+  useEffect(() => {
+    setInsightSections(null);
+    setInsightError(null);
+    setInsightLoading(false);
+  }, [insightsStaleKey]);
+
+  useEffect(() => {
+    if (prevProjectIdRef.current !== projectId) {
+      setInsightOpen(false);
+      prevProjectIdRef.current = projectId;
+    }
+  }, [projectId]);
+
+  const requestInsights = useCallback(async () => {
+    if (!projectId || insightInFlight.current) return;
+    insightInFlight.current = true;
+    const keyAtStart = staleKeyRef.current;
+    setInsightLoading(true);
+    setInsightError(null);
+    setInsightSections(null);
+    try {
+      const res = await ApiService.post('/api/ai/metrics-insights', {
+        projectId: Number(projectId),
+        framework: 'KANBAN',
+        timeRange: kanbanMetricsTimeRange,
+      });
+      if (staleKeyRef.current !== keyAtStart) {
+        return;
+      }
+      const parsed = res?.data?.parsedInsights?.sections;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setInsightSections(parsed);
+      } else {
+        setInsightError('No structured insights were returned. Try again.');
+      }
+    } catch (e) {
+      if (staleKeyRef.current !== keyAtStart) {
+        return;
+      }
+      const msg =
+        e instanceof CustomApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : 'Could not load insights.';
+      setInsightError(msg);
+    } finally {
+      insightInFlight.current = false;
+      setInsightLoading(false);
+    }
+  }, [projectId, kanbanMetricsTimeRange]);
+
+  const handleKanbanToolbarAiInsights = useCallback(() => {
+    setInsightOpen(true);
+    void requestInsights();
+  }, [requestInsights]);
 
   useEffect(() => {
     if (projectId) {
@@ -170,7 +255,21 @@ export default function ManageProject() {
             {activeTab === 'list'      && <IssueListView projectId={projectId} />}
             {activeTab === 'calendar'  && <CalendarView />}
             {activeTab === 'summary' && <ProjectSummary />}
-            {activeTab === 'metrics' && <KanbanMetrics />}
+            {activeTab === 'metrics' && (
+              <KanbanMetrics
+                projectId={projectId}
+                projectName={currentProject.name}
+                metricsTimeRange={kanbanMetricsTimeRange}
+                onMetricsTimeRangeChange={setKanbanMetricsTimeRange}
+                insightOpen={insightOpen}
+                onInsightOpenChange={setInsightOpen}
+                insightSections={insightSections}
+                insightLoading={insightLoading}
+                insightError={insightError}
+                onRequestInsights={requestInsights}
+                onToolbarAiInsights={handleKanbanToolbarAiInsights}
+              />
+            )}
           </div>
         )}
       </div>
