@@ -96,6 +96,17 @@ export const projectApi = {
     }
   },
 
+  getProjectMembers: async (projectId) => {
+    return ApiService.authenticatedRequest(`/api/projects/${projectId}/members`);
+  },
+
+  removeProjectMember: async (projectId, memberUserId) => {
+    return ApiService.authenticatedRequest(
+      `/api/projects/${projectId}/members/m/${memberUserId}`,
+      { method: 'DELETE' },
+    );
+  },
+
   updateMemberRole: async (projectId, memberUserId, role) => {
     return ApiService.authenticatedRequest(
       `/api/projects/${projectId}/members/m/${memberUserId}/role`,
@@ -104,6 +115,44 @@ export const projectApi = {
         body: JSON.stringify({ role }),
       },
     );
+  },
+
+  getBoardColumnLimits: async (projectId) => {
+    try {
+      return await ApiService.authenticatedRequest(
+        `/api/projects/${projectId}/board-columns/limits`,
+      );
+    } catch (error) {
+      console.error('Error fetching board column limits:', error);
+      throw new Error(error.message || 'Failed to fetch board column limits');
+    }
+  },
+
+  updateBoardColumnLimit: async (projectId, status, wipLimit) => {
+    try {
+      return await ApiService.authenticatedRequest(
+        `/api/projects/${projectId}/board-columns/${status}/limit`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ wipLimit }),
+        },
+      );
+    } catch (error) {
+      console.error('Error updating board column limit:', error);
+      throw new Error(error.message || 'Failed to update board column limit');
+    }
+  },
+
+  clearBoardColumnLimit: async (projectId, status) => {
+    try {
+      return await ApiService.authenticatedRequest(
+        `/api/projects/${projectId}/board-columns/${status}/limit`,
+        { method: 'DELETE' },
+      );
+    } catch (error) {
+      console.error('Error clearing board column limit:', error);
+      throw new Error(error.message || 'Failed to clear board column limit');
+    }
   },
 
   // Get chat by project ID
@@ -140,5 +189,14 @@ export const projectApi = {
       console.error('Error accepting invitation:', error);
       throw new Error('Failed to accept invitation');
     }
-  }
+  },
+
+  // Generate an AI task plan for the logged-in user's active tasks in a project
+  planMyTasks: async (projectId) => {
+    const response = await ApiService.authenticatedRequest('/api/ai/plan-my-tasks', {
+      method: 'POST',
+      body: JSON.stringify({ projectId }),
+    });
+    return response;
+  },
 };

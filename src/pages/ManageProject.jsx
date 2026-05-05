@@ -10,11 +10,13 @@ import CalendarView from '../components/CalendarView';
 import ProjectSummary from '../components/ProjectSummary';
 import KanbanMetrics from '../components/KanbanMetrics';
 import ScrumProjectWorkspace from '../components/scrum/ScrumProjectWorkspace';
+import PlutoPlanMyTaskDrawer from '../components/PlutoPlanMyTaskDrawer';
 import { fetchProjectById } from '../store/projectSlice';
 import { fetchIssuesByProject, clearIssues, selectAllIssuesRaw } from '../store/issueSlice';
 import { fetchChatMessages } from '../store/chatSlice';
 import ApiService from '../services/ApiService';
 import CustomApiError from '../services/CustomApiError';
+import { projectApi } from '../services/projectApi';
 import { buildKanbanInsightsStaleKey } from '../utils/kanbanInsightsStaleKey';
 
 const KANBAN_WORKSPACE_TABS = [
@@ -39,6 +41,12 @@ export default function ManageProject() {
   const [insightSections, setInsightSections] = useState(null);
   const [insightError, setInsightError] = useState(null);
   const [insightLoading, setInsightLoading] = useState(false);
+
+  const [planOpen, setPlanOpen] = useState(false);
+  const [planSections, setPlanSections] = useState([]);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState(null);
+  const planInFlight = useRef(false);
 
   const insightsStaleKey = useMemo(
     () =>
@@ -68,6 +76,42 @@ export default function ManageProject() {
     if (prevProjectIdRef.current !== projectId) {
       setInsightOpen(false);
       prevProjectIdRef.current = projectId;
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    setPlanOpen(false);
+    setPlanSections([]);
+    setPlanError(null);
+    setPlanLoading(false);
+  }, [projectId]);
+
+  const fetchPlan = useCallback(async () => {
+    if (!projectId || planInFlight.current) return;
+    planInFlight.current = true;
+    setPlanError(null);
+    setPlanSections([]);
+    setPlanLoading(true);
+    setPlanOpen(true);
+    try {
+      const res = await projectApi.planMyTasks(projectId);
+      const sections = res?.data?.parsedInsights?.sections;
+      if (Array.isArray(sections) && sections.length > 0) {
+        setPlanSections(sections);
+      } else {
+        setPlanError('No plan was returned. Please try again.');
+      }
+    } catch (e) {
+      const msg =
+        e instanceof CustomApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : 'Could not generate task plan.';
+      setPlanError(msg);
+    } finally {
+      planInFlight.current = false;
+      setPlanLoading(false);
     }
   }, [projectId]);
 
@@ -103,7 +147,15 @@ export default function ManageProject() {
           : e instanceof Error
             ? e.message
             : 'Could not load insights.';
-      setInsightError(msg);
+      const normalized = String(msg ?? '');
+      const hasStructuredContractError =
+        normalized.includes('Insights contract violation')
+        || normalized.includes('Failed to parse Gemini JSON response');
+      setInsightError(
+        hasStructuredContractError
+          ? 'AI insights returned an invalid response format. Please try again.'
+          : msg
+      );
     } finally {
       insightInFlight.current = false;
       setInsightLoading(false);
@@ -139,7 +191,7 @@ export default function ManageProject() {
   if (projectLoading || issuesLoading || chatLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header />
+        <Header subtitle="Project Workspace" />
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
@@ -153,7 +205,7 @@ export default function ManageProject() {
   if (projectError) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header />
+        <Header subtitle="Project Workspace" />
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <p className="text-red-600 mb-4">{projectError}</p>
@@ -172,7 +224,7 @@ export default function ManageProject() {
   if (!currentProject) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header />
+        <Header subtitle="Project Workspace" />
         <div className="flex items-center justify-center h-64">
           <p className="text-gray-600">Project not found</p>
         </div>
@@ -184,7 +236,7 @@ export default function ManageProject() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
+      <Header subtitle="Project Workspace" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Top Section - Project Details and Chat */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
@@ -230,47 +282,69 @@ export default function ManageProject() {
         )}
 
         {isScrumProject ? (
-          <ScrumProjectWorkspace projectId={projectId} />
+          <ScrumProjectWorkspace projectId={projectId} projectName={currentProject.name} />
         ) : (
-          <div className="mt-8">
-            <div className="flex items-center justify-between mb-4 border-b border-gray-200">
-              <div className="flex gap-1">
-                {KANBAN_WORKSPACE_TABS.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setActiveTab(id)}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer
-                      ${activeTab === id
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+          <>
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-4 border-b border-gray-200">
+                <div className="flex gap-1">
+                  {KANBAN_WORKSPACE_TABS.map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setActiveTab(id)}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer
+                        ${activeTab === id
+                          ? 'border-primary text-primary'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {activeTab === 'board'     && (
+                <KanbanBoard
+                  projectId={projectId}
+                  onFetchPlan={fetchPlan}
+                  planLoading={planLoading}
+                />
+              )}
+              {activeTab === 'list'      && <IssueListView projectId={projectId} />}
+              {activeTab === 'calendar'  && <CalendarView />}
+              {activeTab === 'summary' && <ProjectSummary />}
+              {activeTab === 'metrics' && (
+                <KanbanMetrics
+                  projectId={projectId}
+                  projectName={currentProject.name}
+                  metricsTimeRange={kanbanMetricsTimeRange}
+                  onMetricsTimeRangeChange={setKanbanMetricsTimeRange}
+                  insightOpen={insightOpen}
+                  onInsightOpenChange={setInsightOpen}
+                  insightSections={insightSections}
+                  insightLoading={insightLoading}
+                  insightError={insightError}
+                  onRequestInsights={requestInsights}
+                  onToolbarAiInsights={handleKanbanToolbarAiInsights}
+                />
+              )}
             </div>
 
-            {activeTab === 'board'     && <KanbanBoard projectId={projectId} />}
-            {activeTab === 'list'      && <IssueListView projectId={projectId} />}
-            {activeTab === 'calendar'  && <CalendarView />}
-            {activeTab === 'summary' && <ProjectSummary />}
-            {activeTab === 'metrics' && (
-              <KanbanMetrics
+            {projectId && (
+              <PlutoPlanMyTaskDrawer
+                open={planOpen}
+                onOpenChange={setPlanOpen}
                 projectId={projectId}
-                projectName={currentProject.name}
-                metricsTimeRange={kanbanMetricsTimeRange}
-                onMetricsTimeRangeChange={setKanbanMetricsTimeRange}
-                insightOpen={insightOpen}
-                onInsightOpenChange={setInsightOpen}
-                insightSections={insightSections}
-                insightLoading={insightLoading}
-                insightError={insightError}
-                onRequestInsights={requestInsights}
-                onToolbarAiInsights={handleKanbanToolbarAiInsights}
+                projectName={currentProject?.name}
+                sections={planSections}
+                loading={planLoading}
+                error={planError}
+                onRetry={fetchPlan}
+                showFab={activeTab === 'board'}
               />
             )}
-          </div>
+          </>
         )}
       </div>
     </div>

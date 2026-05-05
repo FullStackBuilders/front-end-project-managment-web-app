@@ -2,7 +2,7 @@ import { useSelector } from "react-redux";
 import { KanbanBoardContent } from "./KanbanBoardContent";
 import { selectBoardFilteredIssues } from "../store/issueSlice";
 
-export default function KanbanBoard({ projectId }) {
+export default function KanbanBoard({ projectId, onFetchPlan, planLoading }) {
   const { loading } = useSelector((state) => state.issues);
   const issues = useSelector(selectBoardFilteredIssues);
 
@@ -22,6 +22,8 @@ export default function KanbanBoard({ projectId }) {
       projectId={projectId}
       issues={issues}
       filterView="board"
+      onFetchPlan={onFetchPlan}
+      planLoading={planLoading}
     />
   );
 }

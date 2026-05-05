@@ -15,10 +15,9 @@ import {
   isValid,
   min,
 } from 'date-fns';
-import { BarChart2 } from 'lucide-react';
+import { BarChart2, Sparkles } from 'lucide-react';
 import SprintSelectPopoverField from '@/components/SprintSelectPopoverField';
 import { selectAllIssuesRaw } from '../../store/issueSlice';
-import { useActiveSprintSelection } from '@/hooks/useActiveSprintSelection';
 
 const DATE_FMT = 'MMM d';
 
@@ -153,17 +152,18 @@ function sprintChartDayBounds(sprint, completedInSprint) {
   return { start, end: lastDay };
 }
 
-export default function ScrumMetricsView({ projectId }) {
+export default function ScrumMetricsView({
+  projectId,
+  reportSprints,
+  selectedSprintId,
+  setSelectedSprintId,
+  loadingSprints,
+  selectedSprint,
+  sprintOptions,
+  velocitySprints,
+  onToolbarAiInsights,
+}) {
   const issues = useSelector(selectAllIssuesRaw);
-  const {
-    reportSprints,
-    selectedSprintId,
-    setSelectedSprintId,
-    loadingSprints,
-    selectedSprint,
-    sprintOptions,
-    velocitySprints,
-  } = useActiveSprintSelection(projectId);
 
   const issuesInSelectedSprint = useMemo(
     () => issues.filter((i) => issueInSprint(i, selectedSprintId)),
@@ -284,7 +284,17 @@ export default function ScrumMetricsView({ projectId }) {
 
   return (
     <div className="space-y-6 pb-8">
-      <div className="flex items-center justify-start flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        {projectId && selectedSprintId && (
+          <button
+            type="button"
+            onClick={onToolbarAiInsights}
+            className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-50 hover:border-indigo-300"
+          >
+            <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            AI Insights
+          </button>
+        )}
         <SprintSelectPopoverField
           showLabel={false}
           options={sprintOptions}

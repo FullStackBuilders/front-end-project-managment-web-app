@@ -5,7 +5,10 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { userApi } from '../services/userApi';
 
-export default function Header() {
+const DEFAULT_SUBTITLE =
+  'Welcome to your dashboard - Start managing your projects efficiently with our powerful tools.';
+
+export default function Header({ subtitle = DEFAULT_SUBTITLE }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [userProfile, setUserProfile] = useState(null);
@@ -55,9 +58,7 @@ export default function Header() {
             <h1 className="text-2xl font-bold text-foreground">
               TeamBoard
             </h1>
-            <p className="text-muted-foreground">
-              Welcome to your dashboard - Start managing your projects efficiently with our powerful tools.
-            </p>
+            <p className="text-muted-foreground">{subtitle}</p>
           </div>
           <div className="flex items-center gap-3">
             {userProfile && (

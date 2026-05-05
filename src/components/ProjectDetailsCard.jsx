@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import ScrumMasterAssignModal from './scrum/ScrumMasterAssignModal';
 import { Button } from '@/components/ui/button';
-import { Users, Tag, FolderOpen, ChevronDown, ChevronUp, UserPlus } from 'lucide-react';
+import { Users, Tag, FolderOpen, ChevronDown, ChevronUp, UserPlus, Settings2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import SendInviteModal from './SendInviteModal';
 import InviteStatusModal from './InviteStatusModal';
 import ResendConfirmationModal from './ResendConfirmationModal';
+import ManageTeamMembersModal from './ManageTeamMembersModal';
 import { emailInvitationApi } from '../services/emailInvitationApi';
 import { getAvatarColor } from '../utils/avatarColor';
 
@@ -18,7 +18,7 @@ export default function ProjectDetailsCard({ project }) {
   const [isStatusSuccess, setIsStatusSuccess] = useState(false);
   const [showResendModal, setShowResendModal] = useState(false);
   const [resendData, setResendData] = useState(null);
-  const [showScrumMasterModal, setShowScrumMasterModal] = useState(false);
+  const [showManageTeamModal, setShowManageTeamModal] = useState(false);
 
   const { user } = useAuth();
 
@@ -36,15 +36,8 @@ export default function ProjectDetailsCard({ project }) {
   const canInviteMembers =
     project.canInviteMembers ??
     (myRole === 'OWNER' || myRole === 'ADMIN' || (!myRole && isProjectOwner));
-  const canAssignScrumMaster =
-    framework === 'SCRUM' &&
-    (myRole === 'OWNER' || myRole === 'ADMIN' || (!myRole && isProjectOwner));
-
-  const scrumMasterCandidates = (() => {
-    if (!owner) return team;
-    const seen = new Set([owner.id]);
-    return [owner, ...team.filter((m) => !seen.has(m.id))];
-  })();
+  const canManageTeam =
+    myRole === 'OWNER' || myRole === 'ADMIN' || (!myRole && isProjectOwner);
 
   const handleInviteSent = (response) => {
     setIsStatusSuccess(true);
@@ -180,14 +173,15 @@ export default function ProjectDetailsCard({ project }) {
                   Add Member
                 </Button>
               )}
-              {canAssignScrumMaster && (
+              {canManageTeam && team.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowScrumMasterModal(true)}
+                  onClick={() => setShowManageTeamModal(true)}
                   className="text-xs"
                 >
-                  Scrum Master
+                  <Settings2 className="w-3 h-3 mr-1" />
+                  Manage Team
                 </Button>
               )}
               {hasMoreMembers && (
@@ -232,6 +226,11 @@ export default function ProjectDetailsCard({ project }) {
                         Owner
                       </span>
                     )}
+                    {project.scrumMasterId && member.id === project.scrumMasterId && (
+                      <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                        Scrum Master
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 truncate">{member.email}</p>
                 </div>
@@ -266,11 +265,14 @@ export default function ProjectDetailsCard({ project }) {
         onClose={() => setShowStatusModal(false)}
       />
 
-      <ScrumMasterAssignModal
-        open={showScrumMasterModal}
-        onClose={() => setShowScrumMasterModal(false)}
+      <ManageTeamMembersModal
+        open={showManageTeamModal}
+        onClose={() => setShowManageTeamModal(false)}
         projectId={project.id}
-        members={scrumMasterCandidates}
+        ownerId={owner?.id}
+        callerId={user?.userId}
+        myRole={myRole}
+        framework={framework}
       />
     </div>
   );

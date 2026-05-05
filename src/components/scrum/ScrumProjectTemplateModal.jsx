@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { PROJECT_FRAMEWORK } from "@/constants/projectFramework";
 
 /**
- * First step: user picks Kanban or Scrum before the shared create-project form.
+ * First step: user picks Kanban or Scrum framework before the shared create-project form.
  */
 export default function ScrumProjectTemplateModal({ open, onClose, onSelectFramework }) {
   if (!open) return null;
@@ -18,7 +18,7 @@ export default function ScrumProjectTemplateModal({ open, onClose, onSelectFrame
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center rounded-t-xl">
           <h2 id="template-modal-title" className="text-xl font-bold text-gray-900">
-            Choose template
+            Choose Framework
           </h2>
           <button
             type="button"
@@ -31,8 +31,8 @@ export default function ScrumProjectTemplateModal({ open, onClose, onSelectFrame
         </div>
 
         <p className="px-6 pt-4 text-sm text-gray-600">
-          Pick how you want to run this project. You can use the same tasks and board ideas later;
-          this choice sets the framework for your workspace.
+          Choose how your team will manage this project. This determines how tasks are organized and
+          tracked in your workspace.
         </p>
 
         <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -45,8 +45,8 @@ export default function ScrumProjectTemplateModal({ open, onClose, onSelectFrame
           >
             <span className="text-lg font-semibold text-gray-900 block mb-2">Scrum</span>
             <p className="text-sm text-gray-600 leading-relaxed">
-              Scrum helps you manage work in time-boxed sprints with a backlog, so the team can plan
-              increments, review progress, and adapt each cycle.
+              Scrum helps your team manage work in time-boxed sprints. Plan tasks in a backlog, track
+              progress during each sprint, and review outcomes at the end of each sprint.
             </p>
           </button>
 
@@ -59,8 +59,9 @@ export default function ScrumProjectTemplateModal({ open, onClose, onSelectFrame
           >
             <span className="text-lg font-semibold text-gray-900 block mb-2">Kanban</span>
             <p className="text-sm text-gray-600 leading-relaxed">
-              Kanban helps you manage flow with columns and WIP limits, so work moves smoothly from
-              idea to done without fixed sprint boundaries.
+              Kanban visualizes work using boards and columns. It helps teams
+              manage workflow, limit work-in-progress (WIP), and track progress using metrics such as cycle
+              time and lead time.
             </p>
           </button>
         </div>

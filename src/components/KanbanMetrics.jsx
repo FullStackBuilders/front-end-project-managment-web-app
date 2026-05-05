@@ -235,7 +235,7 @@ export default function KanbanMetrics({
     <div className="space-y-6">
 
       {/* ── Time range selector ───────────────────────── */}
-      <div className="flex items-center justify-end flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         {projectId && (
           <button
             type="button"

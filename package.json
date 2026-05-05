@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test:layout": "node --test src/components/scrum/scrumCalendarLayout.test.js",
+    "test:wip": "node --test src/utils/wipLimits.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

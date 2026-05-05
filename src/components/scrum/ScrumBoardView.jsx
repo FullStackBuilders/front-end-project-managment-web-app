@@ -14,7 +14,7 @@ import { setFilters } from "@/store/issueSlice";
  * @param {object} props
  * @param {string|number} props.projectId
  */
-export default function ScrumBoardView({ projectId }) {
+export default function ScrumBoardView({ projectId, onFetchPlan, planLoading }) {
   const dispatch = useDispatch();
   const { loading: issuesLoading } = useSelector((state) => state.issues);
   const allIssues = useSelector((state) => state.issues.issues);
@@ -161,6 +161,8 @@ export default function ScrumBoardView({ projectId }) {
       filterView="scrumBoard"
       sprintFilterOptions={sprintFilterOptions}
       showCreateInTodoColumn={false}
+      onFetchPlan={onFetchPlan}
+      planLoading={planLoading}
     />
   );
 }

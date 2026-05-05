@@ -3,7 +3,7 @@
  * @param {unknown} value
  * @returns {unknown}
  */
-function sortKeysDeep(value) {
+export function sortKeysDeep(value) {
   if (value === null || typeof value !== 'object') {
     return value;
   }
